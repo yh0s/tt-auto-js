@@ -1,5 +1,5 @@
 /**
- * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ)
+ * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ + 不得意キー特性)
  */
 (async function () {
     const DEFAULT_CONFIG = {
@@ -12,8 +12,12 @@
         // --- 人間性シミュレーション設定 ---
         humanitySim: false,
         humanityFeatures: {
-            concentration: true // 集中力シミュレーションの個別ON/OFF状態
-        }
+            concentration: true, // 集中力シミュレーション
+            weakKeys: false      // 不得意キーシミュレーション
+        },
+        weakKeysList: [],        // 例: ['q', 'p', '-', '1']
+        weakKeysBase: 1.5,       // ペナルティの基準倍率
+        weakKeysVar: 0.2         // ペナルティのランダム変動幅 (±)
     };
 
     // --- 初期設定用UI作成クラス ---
@@ -199,11 +203,11 @@
 
             // 人間性シミュレーション用の状態管理
             this.humanityStartTime = Date.now();
-            this.concHistory = new Array(50).fill(100); // 集中力推移の履歴
+            this.concHistory = new Array(50).fill(100);
             this.humanityState = {
-                concentration: 100, // 0-100
-                delayMult: 1.0,     // 全要素を統合した最終的なDelay乗算値
-                missMult: 1.0       // 全要素を統合した最終的なMissRate乗算値
+                concentration: 100,
+                delayMult: 1.0,
+                missMult: 1.0
             };
             this.humanityUiContainer = null;
             this.isHumanityDragging = false;
@@ -315,7 +319,6 @@
                 this.config.autoSkip = e.target.checked;
             });
 
-            // 人間性シミュレーション全体のON/OFF
             humanityExec.addEventListener('change', (e) => {
                 this.config.humanitySim = e.target.checked;
                 if (this.config.humanitySim) {
@@ -345,7 +348,6 @@
                 cancelBtn.style.background = "#6c757d";
             };
 
-            // メインUIのドラッグ
             dragHandle.addEventListener('mousedown', (e) => {
                 this.isDragging = true;
                 const rect = this.execUiContainer.getBoundingClientRect();
@@ -359,7 +361,6 @@
             this.canvasCtx = canvas.getContext('2d');
             this.graphInterval = setInterval(() => this.updateGraph(), 200);
 
-            // 初期状態がONなら人間性モーダルも表示
             if (this.config.humanitySim) {
                 this.createHumanityUI();
             }
@@ -372,9 +373,8 @@
             if (this.humanityUiContainer) return;
 
             this.humanityUiContainer = document.createElement('div');
-            // ★リサイズ可能になるようプロパティを追加
             this.humanityUiContainer.style.cssText = `
-                position: fixed; top: 20px; left: 20px; width: 260px; height: 320px;
+                position: fixed; top: 20px; left: 20px; width: 260px; height: 360px;
                 min-width: 230px; min-height: 250px;
                 background: rgba(30, 20, 40, 0.9); color: #f8cce5;
                 padding: 10px; border-radius: 8px; z-index: 99998;
@@ -391,11 +391,14 @@
 
                 <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-shrink: 0;">
                     <div style="color: #aaa; margin-bottom: 4px;">[ Toggles ]</div>
-                    <label style="cursor: pointer; display: flex; align-items: center;">
+                    <label style="cursor: pointer; display: flex; align-items: center; margin-bottom: 4px;">
                         <input type="checkbox" id="tt-hum-toggle-conc" ${this.config.humanityFeatures.concentration ? 'checked' : ''} style="margin-right: 6px;"> 
-                        Concentration
+                        Concentration (集中力)
                     </label>
-                    <div style="color: #666; font-size: 9px; margin-left: 20px;">(今後追加予定の機能もここに並びます)</div>
+                    <label style="cursor: pointer; display: flex; align-items: center;">
+                        <input type="checkbox" id="tt-hum-toggle-weak" ${this.config.humanityFeatures.weakKeys ? 'checked' : ''} style="margin-right: 6px;"> 
+                        Weak Keys (不得意キー)
+                    </label>
                 </div>
 
                 <div id="tt-hum-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
@@ -421,9 +424,7 @@
                         <div style="width: 100%; background: #444; height: 6px; border-radius: 3px; margin: 3px 0 6px 0; overflow: hidden; flex-shrink: 0;">
                             <div id="tt-hum-bar-conc" style="width: 100%; height: 100%; background: #00FF00; transition: width 0.5s, background-color 0.5s;"></div>
                         </div>
-
                         <canvas id="tt-hum-conc-graph" style="background: #000; border: 1px solid #444; border-radius: 4px; margin-bottom: 6px; flex-grow: 1; min-height: 0; width: 100%; box-sizing: border-box;"></canvas>
-
                         <div style="display: flex; justify-content: space-between; color: #ccc; flex-shrink: 0;">
                             <span>Delay Fix:</span> <span id="tt-hum-val-delay">x1.00</span>
                         </div>
@@ -432,27 +433,66 @@
                         </div>
                     </div>
 
-                    <div id="tt-hum-info-none" style="display: ${this.config.humanityFeatures.concentration ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px;">
+                    <div id="tt-hum-info-weak" style="display: ${this.config.humanityFeatures.weakKeys ? 'flex' : 'none'}; flex-direction: column; margin-top: 8px; border-top: 1px dashed #666; padding-top: 6px; flex-shrink: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span>Weak: <span id="tt-hum-wk-list" style="color: #FFD700; word-break: break-all;">${this.config.weakKeysList.join(',').toUpperCase() || 'None'}</span></span>
+                            <button id="tt-hum-btn-wk-edit" style="padding: 2px 6px; font-size: 10px; background: #d63384; color: white; border: none; border-radius: 3px; cursor: pointer;">Edit</button>
+                        </div>
+                        <div style="display: flex; gap: 4px; align-items: center;">
+                            Base:x<input type="number" id="tt-hum-wk-base" value="${this.config.weakKeysBase}" step="0.1" min="1.0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;">
+                            Var:±<input type="number" id="tt-hum-wk-var" value="${this.config.weakKeysVar}" step="0.1" min="0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;">
+                        </div>
+                    </div>
+
+                    <div id="tt-hum-info-none" style="display: ${(this.config.humanityFeatures.concentration || this.config.humanityFeatures.weakKeys) ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">
                         No features enabled.
                     </div>
                 </div>
             `;
             document.body.appendChild(this.humanityUiContainer);
 
-            // トグルイベント
+            // 要素取得
             const concToggle = this.humanityUiContainer.querySelector('#tt-hum-toggle-conc');
+            const weakToggle = this.humanityUiContainer.querySelector('#tt-hum-toggle-weak');
+
             const infoConc = this.humanityUiContainer.querySelector('#tt-hum-info-conc');
+            const infoWeak = this.humanityUiContainer.querySelector('#tt-hum-info-weak');
             const infoNone = this.humanityUiContainer.querySelector('#tt-hum-info-none');
 
+            const btnWkEdit = this.humanityUiContainer.querySelector('#tt-hum-btn-wk-edit');
+            const inWkBase = this.humanityUiContainer.querySelector('#tt-hum-wk-base');
+            const inWkVar = this.humanityUiContainer.querySelector('#tt-hum-wk-var');
+
+            const updateInfoDisplay = () => {
+                const anyEnabled = this.config.humanityFeatures.concentration || this.config.humanityFeatures.weakKeys;
+                infoNone.style.display = anyEnabled ? 'none' : 'block';
+                infoConc.style.display = this.config.humanityFeatures.concentration ? 'flex' : 'none';
+                infoWeak.style.display = this.config.humanityFeatures.weakKeys ? 'flex' : 'none';
+            };
+
+            // トグルイベント
             concToggle.addEventListener('change', (e) => {
                 this.config.humanityFeatures.concentration = e.target.checked;
-                if (this.config.humanityFeatures.concentration) {
-                    infoConc.style.display = 'flex'; // リサイズ対応のためblockからflexに変更
-                    infoNone.style.display = 'none';
-                } else {
-                    infoConc.style.display = 'none';
-                    infoNone.style.display = 'block';
-                }
+                updateInfoDisplay();
+            });
+            weakToggle.addEventListener('change', (e) => {
+                this.config.humanityFeatures.weakKeys = e.target.checked;
+                updateInfoDisplay();
+            });
+
+            // 不得意キー設定イベント
+            btnWkEdit.addEventListener('click', () => {
+                this.openWeakKeysModal();
+            });
+            inWkBase.addEventListener('change', (e) => {
+                let v = parseFloat(e.target.value);
+                if (isNaN(v) || v < 1.0) v = 1.0;
+                this.config.weakKeysBase = v;
+            });
+            inWkVar.addEventListener('change', (e) => {
+                let v = parseFloat(e.target.value);
+                if (isNaN(v) || v < 0) v = 0;
+                this.config.weakKeysVar = v;
             });
 
             // ドラッグイベント
@@ -465,6 +505,77 @@
             });
             document.addEventListener('mousemove', this.onHumanityMouseMove);
             document.addEventListener('mouseup', this.onHumanityMouseUp);
+        }
+
+        // --- 不得意キー選択モーダル ---
+        openWeakKeysModal() {
+            if (document.getElementById('tt-wk-modal')) return;
+
+            const overlay = document.createElement('div');
+            overlay.id = 'tt-wk-modal';
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.7); z-index: 100000;
+                display: flex; justify-content: center; align-items: center; font-family: sans-serif;
+            `;
+
+            // QWERTYキー配列
+            const keys = [
+                ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '^', '\\'],
+                ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '@', '['],
+                ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', ':', ']'],
+                ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', '_']
+            ];
+
+            let gridHtml = '';
+            keys.forEach(row => {
+                gridHtml += `<div style="display: flex; justify-content: center; gap: 4px; margin-bottom: 4px;">`;
+                row.forEach(k => {
+                    const isSel = this.config.weakKeysList.includes(k);
+                    const bg = isSel ? '#d63384' : '#444';
+                    gridHtml += `<button class="tt-wk-key-btn" data-key="${k}" style="width: 28px; height: 28px; border: 1px solid #222; border-radius: 4px; background: ${bg}; color: white; cursor: pointer; font-weight: bold; font-size: 12px; padding: 0;">${k.toUpperCase()}</button>`;
+                });
+                gridHtml += `</div>`;
+            });
+
+            overlay.innerHTML = `
+                <div style="background: #222; padding: 20px; border-radius: 8px; border: 1px solid #d63384; color: white; width: 440px;">
+                    <h3 style="margin-top: 0; margin-bottom: 15px; color: #d63384;">Select Weak Keys</h3>
+                    <div style="margin-bottom: 20px;">
+                        ${gridHtml}
+                    </div>
+                    <div style="text-align: right;">
+                        <button id="tt-wk-cancel" style="padding: 6px 12px; border: none; border-radius: 4px; background: #666; color: white; cursor: pointer; margin-right: 8px; font-weight: bold;">Cancel</button>
+                        <button id="tt-wk-save" style="padding: 6px 12px; border: none; border-radius: 4px; background: #d63384; color: white; cursor: pointer; font-weight: bold;">Save</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            let currentSelection = [...this.config.weakKeysList];
+            const btns = overlay.querySelectorAll('.tt-wk-key-btn');
+            btns.forEach(b => {
+                b.onclick = () => {
+                    const k = b.getAttribute('data-key');
+                    if (currentSelection.includes(k)) {
+                        currentSelection = currentSelection.filter(x => x !== k);
+                        b.style.background = '#444';
+                    } else {
+                        currentSelection.push(k);
+                        b.style.background = '#d63384';
+                    }
+                };
+            });
+
+            overlay.querySelector('#tt-wk-cancel').onclick = () => {
+                overlay.remove();
+            };
+            overlay.querySelector('#tt-wk-save').onclick = () => {
+                this.config.weakKeysList = currentSelection;
+                const listEl = document.getElementById('tt-hum-wk-list');
+                if (listEl) listEl.textContent = this.config.weakKeysList.join(',').toUpperCase() || 'None';
+                overlay.remove();
+            };
         }
 
         removeHumanityUI() {
@@ -529,18 +640,15 @@
 
                     this.humanityState.concentration = conc;
 
-                    // 履歴の更新
                     this.concHistory.push(conc);
                     if (this.concHistory.length > 50) this.concHistory.shift();
 
                     const concDelayMult = 1.5 - (conc / 100) * 0.7;
                     const concMissMult = 2.5 - (conc / 100) * 2.0;
 
-                    // 補正値の乗算
                     currentDelayMult *= concDelayMult;
                     currentMissMult *= concMissMult;
 
-                    // 個別UIの更新
                     if (this.humanityUiContainer) {
                         const concValEl = this.humanityUiContainer.querySelector('#tt-hum-val-conc');
                         const concBarEl = this.humanityUiContainer.querySelector('#tt-hum-bar-conc');
@@ -560,7 +668,7 @@
                             concBarEl.style.backgroundColor = concColor;
                         }
 
-                        // ★集中力グラフの描画
+                        // 集中力グラフの描画
                         const concCanvas = this.humanityUiContainer.querySelector('#tt-hum-conc-graph');
                         if (concCanvas) {
                             const ctx = concCanvas.getContext('2d');
@@ -571,7 +679,6 @@
 
                             ctx.clearRect(0, 0, cw, ch);
 
-                            // 100% / 0% ガイドライン
                             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
                             ctx.font = '9px monospace';
                             ctx.textBaseline = 'top';
@@ -586,8 +693,7 @@
                             ctx.lineTo(cw, ch);
                             ctx.stroke();
 
-                            // グラフ線の描画
-                            ctx.strokeStyle = concColor; // 現在のレベルに応じた色
+                            ctx.strokeStyle = concColor;
                             ctx.lineWidth = 2;
                             ctx.beginPath();
                             this.concHistory.forEach((val, i) => {
@@ -606,6 +712,7 @@
                 this.humanityState.missMult = currentMissMult;
 
                 // --- Overall Status (Effective 値) の更新 ---
+                // ※ ここにはWeakKeys(一打ごとのランダム要素)は含めず、ベースとなる実効値を表示する
                 if (this.humanityUiContainer) {
                     const effMinDelay = Math.round(this.config.minDelay * currentDelayMult);
                     const effMaxDelay = Math.round(this.config.maxDelay * currentDelayMult);
@@ -657,7 +764,7 @@
                 if (stddevEl) stddevEl.textContent = stdDev.toFixed(2);
             }
 
-            // --- メインKPSグラフ描画 ---
+            // --- メイングラフ描画 ---
             const canvas = this.execUiContainer.querySelector('#tt-kps-graph');
             if (this.canvasCtx && canvas) {
                 canvas.width = canvas.clientWidth;
@@ -708,6 +815,8 @@
                 this.execUiContainer.parentNode.removeChild(this.execUiContainer);
             }
             this.removeHumanityUI();
+            const wkModal = document.getElementById('tt-wk-modal');
+            if (wkModal) wkModal.remove();
         }
 
         async delay(ms) {
@@ -722,13 +831,15 @@
             });
         }
 
-        getRandomDelay() {
+        // 引数に不得意キー等による追加のペナルティ倍率を受け取る
+        getRandomDelay(extraPenalty = 1.0) {
             const min = Math.min(this.config.minDelay, this.config.maxDelay);
             const max = Math.max(this.config.minDelay, this.config.maxDelay);
             let baseDelay = Math.floor(Math.random() * (max - min)) + min;
 
             if (this.config.humanitySim) {
                 baseDelay = Math.floor(baseDelay * this.humanityState.delayMult);
+                baseDelay = Math.floor(baseDelay * extraPenalty);
             }
 
             return baseDelay;
@@ -842,17 +953,33 @@
 
                     const char = lineKeys[j];
 
+                    // --- 補正値の計算 ---
                     let currentMissRate = this.config.missRate;
+                    let weakPenalty = 1.0;
+                    let isWeakKey = false;
+
                     if (this.config.humanitySim) {
-                        currentMissRate *= this.humanityState.missMult;
+                        currentMissRate *= this.humanityState.missMult; // 集中力によるMiss補正
+
+                        // ★不得意キーの判定とペナルティ適用
+                        if (this.config.humanityFeatures.weakKeys && this.config.weakKeysList.includes(char.toLowerCase())) {
+                            isWeakKey = true;
+                            // 基準値 ± 変動幅 (例: 1.5 ± 0.2 -> 1.3〜1.7)
+                            const v = (Math.random() * 2 - 1) * this.config.weakKeysVar;
+                            weakPenalty = this.config.weakKeysBase + v;
+                            if (weakPenalty < 1.0) weakPenalty = 1.0; // ペナルティで逆に速くなるのを防止
+
+                            currentMissRate *= weakPenalty; // Miss Rateにも悪影響を及ぼす
+                        }
                     }
 
+                    // --- 打鍵実行 ---
                     if (currentMissRate > 0 && (Math.random() * 100 < currentMissRate)) {
                         const wrongChar = this.getRandomWrongChar(char);
                         document.title = `${baseTitle} ${wrongChar} (Miss!)`;
 
                         await this.simulateKeydown(wrongChar, false);
-                        await this.delay(this.getRandomDelay());
+                        await this.delay(this.getRandomDelay(weakPenalty)); // ミス時も引っかかりを再現
 
                         j--;
                         continue;
@@ -860,7 +987,7 @@
 
                     document.title = `${baseTitle} ${char}`;
                     await this.simulateKeydown(char, true);
-                    await this.delay(this.getRandomDelay());
+                    await this.delay(this.getRandomDelay(weakPenalty));
                 }
 
                 this.isTypingLine = false;
