@@ -264,6 +264,8 @@
         }
 
         async setPauseState(state) {
+            if (this.controller.youtubeController.player.getCurrentTime() === 0) return;
+
             if (this.isCancelled || this.isPaused === state) return;
             this.isPaused = state;
 
