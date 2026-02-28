@@ -1,5 +1,5 @@
 /**
- * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ + 不得意キー特性 + 物理隣接ミスアルゴリズム)
+ * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ + 不得意キー特性 + 物理隣接ミスアルゴリズム + 仮想キーボード)
  * [Refactored Version]
  */
 (async function () {
@@ -17,11 +17,12 @@
         },
         weakKeysList: [],
         weakKeysBase: 1.5,
-        weakKeysVar: 0.2
+        weakKeysVar: 0.2,
+        showKeyboard: false // 仮想キーボード表示フラグ
     };
 
     // --- 定数データ ---
-    // QWERTYキー配列 (不得意キー選択UI用)
+    // QWERTYキー配列 (不得意キー選択UIおよび仮想キーボードUI用)
     const QWERTY_KEYS = [
         ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '^', '\\'],
         ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '@', '['],
@@ -83,7 +84,6 @@
         '\?': ['\>', '.', '/', '\_', '\\']
     };
 
-
     // --- 初期設定用UI作成クラス ---
     class ConfigModal {
         constructor(defaultConfig) {
@@ -127,6 +127,9 @@
                         <div class="tt-auto-form-group checkbox-group" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
                             <label style="color: #d63384; font-weight: bold;"><input type="checkbox" id="tt-humanity-sim" ${this.config.humanitySim ? 'checked' : ''}>Humanity Simulation</label>
                         </div>
+                        <div class="tt-auto-form-group checkbox-group">
+                            <label style="color: #00bcd4; font-weight: bold;"><input type="checkbox" id="tt-show-keyboard" ${this.config.showKeyboard ? 'checked' : ''}>Show Virtual Keyboard</label>
+                        </div>
                         <div class="tt-auto-actions">
                             <button class="tt-auto-btn cancel" id="tt-cancel-btn">Cancel</button>
                             <button class="tt-auto-btn" id="tt-start-btn">Start</button>
@@ -165,6 +168,7 @@
                     this.config.missRate = isNaN(newMiss) ? 0 : Math.max(0, Math.min(100, newMiss));
                     this.config.autoSkip = getEl('tt-auto-skip').checked;
                     this.config.humanitySim = getEl('tt-humanity-sim').checked;
+                    this.config.showKeyboard = getEl('tt-show-keyboard').checked;
 
                     cleanup();
                     resolve(this.config);
@@ -196,6 +200,8 @@
 
             this.execUiContainer = null;
             this.humanityUiContainer = null;
+            this.keyboardUiContainer = null; // 仮想キーボードUI
+            this.vkKeyElements = new Map();  // 仮想キーボード要素への参照
             this.canvasCtx = null;
             this.graphInterval = null;
 
@@ -261,9 +267,10 @@
         // ==========================================
         createExecutionUI() {
             this.execUiContainer = document.createElement('div');
+            // 要素が増えたため高さを拡張
             this.execUiContainer.style.cssText = `
-                position: fixed; top: 20px; right: 20px; width: 310px; height: 280px;
-                min-width: 280px; min-height: 250px;
+                position: fixed; top: 20px; right: 20px; width: 310px; height: 300px;
+                min-width: 280px; min-height: 270px;
                 background: rgba(20, 20, 20, 0.85); color: #fff; padding: 10px; border-radius: 8px; z-index: 99999;
                 font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.5); backdrop-filter: blur(4px);
                 display: flex; flex-direction: column; resize: both; overflow: hidden;
@@ -285,9 +292,16 @@
                     Miss(%):<input type="number" id="tt-exec-miss" value="${this.config.missRate}" min="0" max="100" step="1" style="${inputStyle}">
                     <label style="cursor: pointer; display: flex; align-items: center; margin-left: auto; background: #333; padding: 2px 4px; border-radius: 3px; border: 1px solid #555;"><input type="checkbox" id="tt-exec-autoskip" ${this.config.autoSkip ? 'checked' : ''} style="margin: 0 4px 0 0;"> Skip</label>
                 </div>
-                <div style="margin-bottom: 8px; flex-shrink: 0; font-size: 11px; border-top: 1px solid #444; padding-top: 6px;">
-                    <label style="cursor: pointer; display: flex; align-items: center; color: #d63384; font-weight: bold;"><input type="checkbox" id="tt-exec-humanity" ${this.config.humanitySim ? 'checked' : ''} style="margin-right: 6px;"> Humanity Simulation</label>
+
+                <div style="margin-bottom: 8px; flex-shrink: 0; font-size: 11px; border-top: 1px solid #444; padding-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+                    <label style="cursor: pointer; display: flex; align-items: center; color: #d63384; font-weight: bold;">
+                        <input type="checkbox" id="tt-exec-humanity" ${this.config.humanitySim ? 'checked' : ''} style="margin-right: 6px;"> Humanity Simulation
+                    </label>
+                    <label style="cursor: pointer; display: flex; align-items: center; color: #00bcd4; font-weight: bold;">
+                        <input type="checkbox" id="tt-exec-keyboard" ${this.config.showKeyboard ? 'checked' : ''} style="margin-right: 6px;"> Virtual Keyboard
+                    </label>
                 </div>
+
                 <canvas id="tt-kps-graph" style="background: #000; border: 1px solid #444; border-radius: 4px; margin-bottom: 8px; flex-grow: 1; min-height: 0; width: 100%; box-sizing: border-box;"></canvas>
                 <div style="display: flex; gap: 5px; flex-shrink: 0; width: 100%;">
                     <button id="tt-exec-pause" style="flex: 1; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Pause</button>
@@ -315,6 +329,11 @@
                 this.config.humanitySim ? this.createHumanityUI() : this.removeHumanityUI();
             });
 
+            getEl('tt-exec-keyboard').addEventListener('change', e => {
+                this.config.showKeyboard = e.target.checked;
+                this.config.showKeyboard ? this.createKeyboardUI() : this.removeKeyboardUI();
+            });
+
             const pauseBtn = getEl('tt-exec-pause');
             pauseBtn.onclick = async () => {
                 if (this.isCancelled) return;
@@ -335,6 +354,65 @@
             this.graphInterval = setInterval(() => this.updateGraph(), 200);
 
             if (this.config.humanitySim) this.createHumanityUI();
+            if (this.config.showKeyboard) this.createKeyboardUI();
+        }
+
+        // ==========================================
+        //  UI作成: 仮想キーボード
+        // ==========================================
+        createKeyboardUI() {
+            if (this.keyboardUiContainer) return;
+
+            this.keyboardUiContainer = document.createElement('div');
+            // 画面の中央下部に初期配置
+            const initLeft = Math.max(0, (window.innerWidth - 450) / 2);
+            const initTop = Math.max(0, window.innerHeight - 250);
+
+            this.keyboardUiContainer.style.cssText = `
+                position: fixed; left: ${initLeft}px; top: ${initTop}px; 
+                background: rgba(30, 20, 40, 0.9); padding: 10px; border-radius: 8px; z-index: 99997;
+                font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #00bcd4;
+                user-select: none; display: flex; flex-direction: column;
+            `;
+
+            let gridHtml = QWERTY_KEYS.map(row =>
+                `<div style="display: flex; justify-content: center; gap: 4px; margin-bottom: 4px;">` +
+                row.map(k => {
+                    const safeK = k.replace(/"/g, '&quot;');
+                    return `<div class="tt-vk-key" data-key="${safeK}" style="width: 28px; height: 28px; border: 1px solid #444; border-radius: 4px; background: #333; color: #fff; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 12px; transition: background 0.1s, transform 0.05s;">${k.toUpperCase()}</div>`;
+                }).join('') + `</div>`
+            ).join('');
+
+            // SPACE キーの追加
+            gridHtml += `<div style="display: flex; justify-content: center; gap: 4px; margin-top: 4px;">
+                <div class="tt-vk-key" data-key="space" style="width: 200px; height: 28px; border: 1px solid #444; border-radius: 4px; background: #333; color: #fff; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 12px; transition: background 0.1s, transform 0.05s;">SPACE</div>
+            </div>`;
+
+            this.keyboardUiContainer.innerHTML = `
+                <div id="tt-vk-drag-handle" style="font-size: 12px; color: #00bcd4; text-align: center; margin-bottom: 8px; cursor: move; border-bottom: 1px dashed #00bcd4; padding-bottom: 4px; font-weight: bold;">
+                    ⌨️ Virtual Keyboard (Drag)
+                </div>
+                <div>${gridHtml}</div>
+            `;
+
+            document.body.appendChild(this.keyboardUiContainer);
+
+            // 要素の参照をMapに保存して高速化
+            this.vkKeyElements.clear();
+            this.keyboardUiContainer.querySelectorAll('.tt-vk-key').forEach(el => {
+                this.vkKeyElements.set(el.getAttribute('data-key'), el);
+            });
+
+            // ドラッグ設定
+            this.setupDraggable(this.keyboardUiContainer, this.keyboardUiContainer.querySelector('#tt-vk-drag-handle'));
+        }
+
+        removeKeyboardUI() {
+            if (this.keyboardUiContainer) {
+                this.keyboardUiContainer.remove();
+                this.keyboardUiContainer = null;
+                this.vkKeyElements.clear();
+            }
         }
 
         // ==========================================
@@ -614,6 +692,8 @@
 
             if (this.execUiContainer) this.execUiContainer.remove();
             this.removeHumanityUI();
+            this.removeKeyboardUI();
+
             const wkModal = document.getElementById('tt-wk-modal');
             if (wkModal) wkModal.remove();
         }
@@ -660,6 +740,32 @@
             return wrongChar;
         }
 
+        // ==========================================
+        //  仮想キーボード 発光処理
+        // ==========================================
+        flashVirtualKey(key, isMiss) {
+            if (!this.config.showKeyboard || !this.keyboardUiContainer) return;
+
+            let keyId = key.toLowerCase();
+            if (keyId === ' ') keyId = 'space';
+
+            const el = this.vkKeyElements.get(keyId);
+            if (el) {
+                el.style.background = isMiss ? '#FF4500' : '#00FF00'; // ミスは赤、正解は緑
+                el.style.color = '#000';
+                el.style.transform = 'scale(0.9)'; // 押されたように少し縮小
+
+                // 少し時間をおいて元に戻す
+                setTimeout(() => {
+                    if (el) {
+                        el.style.background = '#333';
+                        el.style.color = '#fff';
+                        el.style.transform = 'scale(1.0)';
+                    }
+                }, 100);
+            }
+        }
+
         init() {
             const controllerName = "typing--game";
             const selector = `[data-controller~="${controllerName}"]`;
@@ -674,7 +780,12 @@
             this.romajiData = this.controller.lyricsData?.typingRoma || [];
         }
 
-        async simulateKeydown(key, isTrackKps = true) {
+        /**
+         * @param {string} key 押下するキー
+         * @param {boolean} isTrackKps KPS集計に含めるか (AutoSkipなどは含めない)
+         * @param {boolean} isMiss ミス入力かどうか (仮想キーボードの色判定に使用)
+         */
+        async simulateKeydown(key, isTrackKps = true, isMiss = false) {
             let code = `Key${key.toUpperCase()}`;
             let keyCode = key.toUpperCase().charCodeAt(0);
 
@@ -686,6 +797,9 @@
 
             if (this.controller && typeof this.controller._onKeydown === 'function') {
                 await this.controller._onKeydown(event);
+
+                // 仮想キーボードの色変更アニメーション
+                this.flashVirtualKey(key, isMiss);
 
                 if (isTrackKps && key.length === 1 && key !== " " && this.isTypingLine) {
                     const now = Date.now();
@@ -751,14 +865,16 @@
                         const wrongChar = this.getRandomWrongChar(char);
                         document.title = `${baseTitle} ${wrongChar} (Miss!)`;
 
-                        await this.simulateKeydown(wrongChar, false);
+                        // ミス入力 (第3引数をtrue)
+                        await this.simulateKeydown(wrongChar, false, true);
                         await this.delay(this.getRandomDelay(weakPenalty));
                         j--;
                         continue;
                     }
 
                     document.title = `${baseTitle} ${char}`;
-                    await this.simulateKeydown(char, true);
+                    // 正解入力 (第3引数をfalse)
+                    await this.simulateKeydown(char, true, false);
                     await this.delay(this.getRandomDelay(weakPenalty));
                 }
 
@@ -768,7 +884,9 @@
 
                 while (this.isPaused && !this.isCancelled) await this.delay(100);
 
-                if (this.config.autoSkip && !this.isCancelled) await this.simulateKeydown(" ", false);
+                if (this.config.autoSkip && !this.isCancelled) {
+                    await this.simulateKeydown(" ", false, false);
+                }
 
                 while ((this.controller.count - 1) === i) {
                     if (this.isCancelled) break;
@@ -787,7 +905,7 @@
                     await this.delay(this.config.checkInterval);
                 }
 
-                if (!this.isCancelled) await this.simulateKeydown("F4", false);
+                if (!this.isCancelled) await this.simulateKeydown("F4", false, false);
 
                 if (this.controller.youtubeController && this.controller.youtubeController.player) {
                     while (this.controller.youtubeController.player.getCurrentTime() === 0) {
@@ -804,7 +922,7 @@
                 }
 
                 if (this.isCancelled) {
-                    if (!this.isPaused) await this.simulateKeydown("Escape", false);
+                    if (!this.isPaused) await this.simulateKeydown("Escape", false, false);
                     alert("AutoTyperをキャンセルしました。");
                 } else {
                     alert("tt-auto.js finished!");
