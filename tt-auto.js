@@ -1,5 +1,5 @@
 /**
- * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ + 不得意キー特性)
+ * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ + 不得意キー特性 + 物理隣接ミスアルゴリズム)
  */
 (async function () {
     const DEFAULT_CONFIG = {
@@ -12,12 +12,12 @@
         // --- 人間性シミュレーション設定 ---
         humanitySim: false,
         humanityFeatures: {
-            concentration: true, // 集中力シミュレーション
-            weakKeys: false      // 不得意キーシミュレーション
+            concentration: true,
+            weakKeys: false
         },
-        weakKeysList: [],        // 例: ['q', 'p', '-', '1']
-        weakKeysBase: 1.5,       // ペナルティの基準倍率
-        weakKeysVar: 0.2         // ペナルティのランダム変動幅 (±)
+        weakKeysList: [],
+        weakKeysBase: 1.5,
+        weakKeysVar: 0.2
     };
 
     // --- 初期設定用UI作成クラス ---
@@ -201,7 +201,6 @@
             this.onMouseMove = this.handleMouseMove.bind(this);
             this.onMouseUp = this.handleMouseUp.bind(this);
 
-            // 人間性シミュレーション用の状態管理
             this.humanityStartTime = Date.now();
             this.concHistory = new Array(50).fill(100);
             this.humanityState = {
@@ -280,7 +279,6 @@
             `;
             document.body.appendChild(this.execUiContainer);
 
-            // メインUIのイベント設定
             const stepInput = this.execUiContainer.querySelector('#tt-exec-step');
             const minExecInput = this.execUiContainer.querySelector('#tt-exec-min');
             const maxExecInput = this.execUiContainer.querySelector('#tt-exec-max');
@@ -451,7 +449,6 @@
             `;
             document.body.appendChild(this.humanityUiContainer);
 
-            // 要素取得
             const concToggle = this.humanityUiContainer.querySelector('#tt-hum-toggle-conc');
             const weakToggle = this.humanityUiContainer.querySelector('#tt-hum-toggle-weak');
 
@@ -470,7 +467,6 @@
                 infoWeak.style.display = this.config.humanityFeatures.weakKeys ? 'flex' : 'none';
             };
 
-            // トグルイベント
             concToggle.addEventListener('change', (e) => {
                 this.config.humanityFeatures.concentration = e.target.checked;
                 updateInfoDisplay();
@@ -480,7 +476,6 @@
                 updateInfoDisplay();
             });
 
-            // 不得意キー設定イベント
             btnWkEdit.addEventListener('click', () => {
                 this.openWeakKeysModal();
             });
@@ -495,7 +490,6 @@
                 this.config.weakKeysVar = v;
             });
 
-            // ドラッグイベント
             const dragHandle = this.humanityUiContainer.querySelector('#tt-humanity-drag');
             dragHandle.addEventListener('mousedown', (e) => {
                 this.isHumanityDragging = true;
@@ -507,7 +501,6 @@
             document.addEventListener('mouseup', this.onHumanityMouseUp);
         }
 
-        // --- 不得意キー選択モーダル ---
         openWeakKeysModal() {
             if (document.getElementById('tt-wk-modal')) return;
 
@@ -519,7 +512,6 @@
                 display: flex; justify-content: center; align-items: center; font-family: sans-serif;
             `;
 
-            // QWERTYキー配列
             const keys = [
                 ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '^', '\\'],
                 ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '@', '['],
@@ -587,7 +579,6 @@
             }
         }
 
-        // --- ドラッグ制御 (メインUI) ---
         handleMouseMove(e) {
             if (!this.isDragging) return;
             let newX = e.clientX - this.dragOffsetX;
@@ -602,7 +593,6 @@
         }
         handleMouseUp() { this.isDragging = false; }
 
-        // --- ドラッグ制御 (人間性UI) ---
         handleHumanityMouseMove(e) {
             if (!this.isHumanityDragging || !this.humanityUiContainer) return;
             let newX = e.clientX - this.humanityDragOffsetX;
@@ -617,18 +607,13 @@
         }
         handleHumanityMouseUp() { this.isHumanityDragging = false; }
 
-        // ==========================================
-        //  状態更新 & グラフ描画
-        // ==========================================
         updateGraph() {
             if (this.isCancelled || this.isPaused || !this.isTypingLine) return;
 
-            // --- 人間性シミュレーションのリアルタイム計算 ---
             if (this.config.humanitySim) {
                 let currentDelayMult = 1.0;
                 let currentMissMult = 1.0;
 
-                // 1. 集中力シミュレーション
                 if (this.config.humanityFeatures.concentration) {
                     const elapsedSec = (Date.now() - this.humanityStartTime) / 1000;
                     const wave1 = Math.sin(elapsedSec / 30 * Math.PI * 2);
@@ -668,7 +653,6 @@
                             concBarEl.style.backgroundColor = concColor;
                         }
 
-                        // 集中力グラフの描画
                         const concCanvas = this.humanityUiContainer.querySelector('#tt-hum-conc-graph');
                         if (concCanvas) {
                             const ctx = concCanvas.getContext('2d');
@@ -707,12 +691,9 @@
                     }
                 }
 
-                // 最終的な補正値をStateに保存
                 this.humanityState.delayMult = currentDelayMult;
                 this.humanityState.missMult = currentMissMult;
 
-                // --- Overall Status (Effective 値) の更新 ---
-                // ※ ここにはWeakKeys(一打ごとのランダム要素)は含めず、ベースとなる実効値を表示する
                 if (this.humanityUiContainer) {
                     const effMinDelay = Math.round(this.config.minDelay * currentDelayMult);
                     const effMaxDelay = Math.round(this.config.maxDelay * currentDelayMult);
@@ -734,7 +715,6 @@
                 }
             }
 
-            // --- Live KPS 計算 ---
             let kpsVal = 0;
             if (this.recentIntervals.length > 0) {
                 const sum = this.recentIntervals.reduce((a, b) => a + b, 0);
@@ -750,7 +730,6 @@
             const kpsText = this.execUiContainer.querySelector('#tt-kps-val');
             if (kpsText) kpsText.textContent = kpsVal.toFixed(2);
 
-            // --- Lifetime KPS & ばらつき(標準偏差) 計算 ---
             if (this.allKpsRecords.length > 0) {
                 const sumAll = this.allKpsRecords.reduce((a, b) => a + b, 0);
                 const lifetimeKps = sumAll / this.allKpsRecords.length;
@@ -764,7 +743,6 @@
                 if (stddevEl) stddevEl.textContent = stdDev.toFixed(2);
             }
 
-            // --- メイングラフ描画 ---
             const canvas = this.execUiContainer.querySelector('#tt-kps-graph');
             if (this.canvasCtx && canvas) {
                 canvas.width = canvas.clientWidth;
@@ -831,7 +809,6 @@
             });
         }
 
-        // 引数に不得意キー等による追加のペナルティ倍率を受け取る
         getRandomDelay(extraPenalty = 1.0) {
             const min = Math.min(this.config.minDelay, this.config.maxDelay);
             const max = Math.max(this.config.minDelay, this.config.maxDelay);
@@ -845,9 +822,71 @@
             return baseDelay;
         }
 
+        // ★改修: 物理的に隣接するキーの中からランダムに選ぶ
         getRandomWrongChar(correctChar) {
-            const chars = "abcdefghijklmnopqrstuvwxyz";
+            const ADJACENT_KEYS = {
+                '1': ['2', 'q'],
+                '2': ['1', '3', 'q', 'w'],
+                '3': ['2', '4', 'w', 'e'],
+                '4': ['3', '5', 'e', 'r'],
+                '5': ['4', '6', 'r', 't'],
+                '6': ['5', '7', 't', 'y'],
+                '7': ['6', '8', 'y', 'u'],
+                '8': ['7', '9', 'u', 'i'],
+                '9': ['8', '0', 'i', 'o'],
+                '0': ['9', '-', 'o', 'p'],
+                '-': ['0', '^', 'p', '@'],
+                '^': ['-', '\\', '@', '['],
+                'q': ['1', '2', 'w', 'a'],
+                'w': ['2', '3', 'q', 'e', 'a', 's'],
+                'e': ['3', '4', 'w', 'r', 's', 'd'],
+                'r': ['4', '5', 'e', 't', 'd', 'f'],
+                't': ['5', '6', 'r', 'y', 'f', 'g'],
+                'y': ['6', '7', 't', 'u', 'g', 'h'],
+                'u': ['7', '8', 'y', 'i', 'h', 'j'],
+                'i': ['8', '9', 'u', 'o', 'j', 'k'],
+                'o': ['9', '0', 'i', 'p', 'k', 'l'],
+                'p': ['0', '-', 'o', '@', 'l', ';'],
+                '@': ['-', '^', 'p', '[', ';', ':'],
+                '[': ['^', '\\', '@', ':', ']'],
+                'a': ['q', 'w', 's', 'z'],
+                's': ['w', 'e', 'a', 'd', 'z', 'x'],
+                'd': ['e', 'r', 's', 'f', 'x', 'c'],
+                'f': ['r', 't', 'd', 'g', 'c', 'v'],
+                'g': ['t', 'y', 'f', 'h', 'v', 'b'],
+                'h': ['y', 'u', 'g', 'j', 'b', 'n'],
+                'j': ['u', 'i', 'h', 'k', 'n', 'm'],
+                'k': ['i', 'o', 'j', 'l', 'm', ','],
+                'l': ['o', 'p', 'k', ';', ',', '.'],
+                ';': ['p', '@', 'l', ':', '.', '/'],
+                ':': ['@', '[', ';', ']', '/', '\\'],
+                ']': ['[', ':', '\\'],
+                'z': ['a', 's', 'x'],
+                'x': ['s', 'd', 'z', 'c'],
+                'c': ['d', 'f', 'x', 'v'],
+                'v': ['f', 'g', 'c', 'b'],
+                'b': ['g', 'h', 'v', 'n'],
+                'n': ['h', 'j', 'b', 'm'],
+                'm': ['j', 'k', 'n', ','],
+                ',': ['k', 'l', 'm', '.'],
+                '.': ['l', ';', ',', '/'],
+                '/': [';', ':', '.', '\\'],
+                '\!': ['1', '2', 'q', '\"'],
+                '\"': ['1', '\!', '2', '3', '\#', 'q', 'w'],
+                '\'': ['6', '\&', '7', '8', '\(', 'y', 'u'],
+                '\?': ['\>', '.', '/', '\_', '\\']
+            };
+
             const target = (correctChar || "").toLowerCase();
+            const adjacents = ADJACENT_KEYS[target];
+
+            // 定義された隣接キーがあればその中からランダムに選ぶ
+            if (adjacents && adjacents.length > 0) {
+                return adjacents[Math.floor(Math.random() * adjacents.length)];
+            }
+
+            // 想定外の記号など隣接キーが見つからない場合のフォールバック
+            const chars = "abcdefghijklmnopqrstuvwxyz";
             let wrongChar = target;
             for (let i = 0; i < 10; i++) {
                 wrongChar = chars.charAt(Math.floor(Math.random() * chars.length));
@@ -953,33 +992,29 @@
 
                     const char = lineKeys[j];
 
-                    // --- 補正値の計算 ---
                     let currentMissRate = this.config.missRate;
                     let weakPenalty = 1.0;
                     let isWeakKey = false;
 
                     if (this.config.humanitySim) {
-                        currentMissRate *= this.humanityState.missMult; // 集中力によるMiss補正
+                        currentMissRate *= this.humanityState.missMult;
 
-                        // ★不得意キーの判定とペナルティ適用
                         if (this.config.humanityFeatures.weakKeys && this.config.weakKeysList.includes(char.toLowerCase())) {
                             isWeakKey = true;
-                            // 基準値 ± 変動幅 (例: 1.5 ± 0.2 -> 1.3〜1.7)
                             const v = (Math.random() * 2 - 1) * this.config.weakKeysVar;
                             weakPenalty = this.config.weakKeysBase + v;
-                            if (weakPenalty < 1.0) weakPenalty = 1.0; // ペナルティで逆に速くなるのを防止
+                            if (weakPenalty < 1.0) weakPenalty = 1.0;
 
-                            currentMissRate *= weakPenalty; // Miss Rateにも悪影響を及ぼす
+                            currentMissRate *= weakPenalty;
                         }
                     }
 
-                    // --- 打鍵実行 ---
                     if (currentMissRate > 0 && (Math.random() * 100 < currentMissRate)) {
                         const wrongChar = this.getRandomWrongChar(char);
                         document.title = `${baseTitle} ${wrongChar} (Miss!)`;
 
                         await this.simulateKeydown(wrongChar, false);
-                        await this.delay(this.getRandomDelay(weakPenalty)); // ミス時も引っかかりを再現
+                        await this.delay(this.getRandomDelay(weakPenalty));
 
                         j--;
                         continue;
