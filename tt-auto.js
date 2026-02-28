@@ -1,5 +1,5 @@
 /**
- * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示)
+ * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ)
  */
 (async function () {
     const DEFAULT_CONFIG = {
@@ -199,6 +199,7 @@
 
             // 人間性シミュレーション用の状態管理
             this.humanityStartTime = Date.now();
+            this.concHistory = new Array(50).fill(100); // 集中力推移の履歴
             this.humanityState = {
                 concentration: 100, // 0-100
                 delayMult: 1.0,     // 全要素を統合した最終的なDelay乗算値
@@ -318,9 +319,9 @@
             humanityExec.addEventListener('change', (e) => {
                 this.config.humanitySim = e.target.checked;
                 if (this.config.humanitySim) {
-                    this.createHumanityUI(); // ONにされたら表示
+                    this.createHumanityUI();
                 } else {
-                    this.removeHumanityUI(); // OFFにされたら非表示（内部状態は維持）
+                    this.removeHumanityUI();
                 }
             });
 
@@ -371,21 +372,24 @@
             if (this.humanityUiContainer) return;
 
             this.humanityUiContainer = document.createElement('div');
+            // ★リサイズ可能になるようプロパティを追加
             this.humanityUiContainer.style.cssText = `
-                position: fixed; top: 20px; left: 20px; width: 250px; 
+                position: fixed; top: 20px; left: 20px; width: 260px; height: 320px;
+                min-width: 230px; min-height: 250px;
                 background: rgba(30, 20, 40, 0.9); color: #f8cce5;
                 padding: 10px; border-radius: 8px; z-index: 99998;
                 font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
                 backdrop-filter: blur(4px); border: 1px solid #d63384;
                 display: flex; flex-direction: column;
+                resize: both; overflow: hidden;
             `;
 
             this.humanityUiContainer.innerHTML = `
-                <div id="tt-humanity-drag" style="font-size: 13px; font-weight: bold; margin-bottom: 10px; color: #d63384; cursor: move; user-select: none; border-bottom: 1px solid #d63384; padding-bottom: 4px;">
+                <div id="tt-humanity-drag" style="font-size: 13px; font-weight: bold; margin-bottom: 10px; color: #d63384; cursor: move; user-select: none; border-bottom: 1px solid #d63384; padding-bottom: 4px; flex-shrink: 0;">
                     🧬 Humanity Simulation (Drag)
                 </div>
 
-                <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px;">
+                <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-shrink: 0;">
                     <div style="color: #aaa; margin-bottom: 4px;">[ Toggles ]</div>
                     <label style="cursor: pointer; display: flex; align-items: center;">
                         <input type="checkbox" id="tt-hum-toggle-conc" ${this.config.humanityFeatures.concentration ? 'checked' : ''} style="margin-right: 6px;"> 
@@ -394,10 +398,10 @@
                     <div style="color: #666; font-size: 9px; margin-left: 20px;">(今後追加予定の機能もここに並びます)</div>
                 </div>
 
-                <div id="tt-hum-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; min-height: 50px;">
-                    <div style="color: #aaa; margin-bottom: 4px;">[ Information ]</div>
+                <div id="tt-hum-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
+                    <div style="color: #aaa; margin-bottom: 4px; flex-shrink: 0;">[ Information ]</div>
 
-                    <div id="tt-hum-overall-status" style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #666;">
+                    <div id="tt-hum-overall-status" style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #666; flex-shrink: 0;">
                         <div style="display: flex; justify-content: space-between; color: #00FF00; font-weight: bold;">
                             <span>Eff. KPS:</span> <span id="tt-hum-eff-kps">0.00 - 0.00</span>
                         </div>
@@ -409,21 +413,25 @@
                         </div>
                     </div>
 
-                    <div id="tt-hum-info-conc" style="display: ${this.config.humanityFeatures.concentration ? 'block' : 'none'};">
-                        <div style="display: flex; justify-content: space-between;">
+                    <div id="tt-hum-info-conc" style="display: ${this.config.humanityFeatures.concentration ? 'flex' : 'none'}; flex-direction: column; flex-grow: 1; min-height: 0;">
+                        <div style="display: flex; justify-content: space-between; flex-shrink: 0;">
                             <span>Focus Level:</span>
                             <span id="tt-hum-val-conc" style="font-weight: bold; color: #fff;">100%</span>
                         </div>
-                        <div style="width: 100%; background: #444; height: 6px; border-radius: 3px; margin: 3px 0 6px 0; overflow: hidden;">
+                        <div style="width: 100%; background: #444; height: 6px; border-radius: 3px; margin: 3px 0 6px 0; overflow: hidden; flex-shrink: 0;">
                             <div id="tt-hum-bar-conc" style="width: 100%; height: 100%; background: #00FF00; transition: width 0.5s, background-color 0.5s;"></div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; color: #ccc;">
+
+                        <canvas id="tt-hum-conc-graph" style="background: #000; border: 1px solid #444; border-radius: 4px; margin-bottom: 6px; flex-grow: 1; min-height: 0; width: 100%; box-sizing: border-box;"></canvas>
+
+                        <div style="display: flex; justify-content: space-between; color: #ccc; flex-shrink: 0;">
                             <span>Delay Fix:</span> <span id="tt-hum-val-delay">x1.00</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; color: #ccc;">
+                        <div style="display: flex; justify-content: space-between; color: #ccc; flex-shrink: 0;">
                             <span>Miss Fix:</span> <span id="tt-hum-val-miss">x1.00</span>
                         </div>
                     </div>
+
                     <div id="tt-hum-info-none" style="display: ${this.config.humanityFeatures.concentration ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px;">
                         No features enabled.
                     </div>
@@ -439,7 +447,7 @@
             concToggle.addEventListener('change', (e) => {
                 this.config.humanityFeatures.concentration = e.target.checked;
                 if (this.config.humanityFeatures.concentration) {
-                    infoConc.style.display = 'block';
+                    infoConc.style.display = 'flex'; // リサイズ対応のためblockからflexに変更
                     infoNone.style.display = 'none';
                 } else {
                     infoConc.style.display = 'none';
@@ -506,7 +514,6 @@
 
             // --- 人間性シミュレーションのリアルタイム計算 ---
             if (this.config.humanitySim) {
-                // 毎フレームリセット（各機能の補正を掛け合わせていく）
                 let currentDelayMult = 1.0;
                 let currentMissMult = 1.0;
 
@@ -521,6 +528,10 @@
                     if (conc < 0) conc = 0;
 
                     this.humanityState.concentration = conc;
+
+                    // 履歴の更新
+                    this.concHistory.push(conc);
+                    if (this.concHistory.length > 50) this.concHistory.shift();
 
                     const concDelayMult = 1.5 - (conc / 100) * 0.7;
                     const concMissMult = 2.5 - (conc / 100) * 2.0;
@@ -540,16 +551,57 @@
                         if (delayValEl) delayValEl.textContent = `x${concDelayMult.toFixed(2)}`;
                         if (missValEl) missValEl.textContent = `x${concMissMult.toFixed(2)}`;
 
+                        let concColor = '#00FF00';
+                        if (conc <= 30) concColor = '#FF4500';
+                        else if (conc <= 60) concColor = '#FFD700';
+
                         if (concBarEl) {
                             concBarEl.style.width = `${conc}%`;
-                            if (conc > 60) concBarEl.style.backgroundColor = '#00FF00';
-                            else if (conc > 30) concBarEl.style.backgroundColor = '#FFD700';
-                            else concBarEl.style.backgroundColor = '#FF4500';
+                            concBarEl.style.backgroundColor = concColor;
+                        }
+
+                        // ★集中力グラフの描画
+                        const concCanvas = this.humanityUiContainer.querySelector('#tt-hum-conc-graph');
+                        if (concCanvas) {
+                            const ctx = concCanvas.getContext('2d');
+                            concCanvas.width = concCanvas.clientWidth;
+                            concCanvas.height = concCanvas.clientHeight;
+                            const cw = concCanvas.width;
+                            const ch = concCanvas.height;
+
+                            ctx.clearRect(0, 0, cw, ch);
+
+                            // 100% / 0% ガイドライン
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                            ctx.font = '9px monospace';
+                            ctx.textBaseline = 'top';
+                            ctx.fillText(`100%`, 2, 2);
+                            ctx.textBaseline = 'bottom';
+                            ctx.fillText(`0%`, 2, ch - 1);
+
+                            ctx.strokeStyle = '#333';
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(0, ch);
+                            ctx.lineTo(cw, ch);
+                            ctx.stroke();
+
+                            // グラフ線の描画
+                            ctx.strokeStyle = concColor; // 現在のレベルに応じた色
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            this.concHistory.forEach((val, i) => {
+                                const x = (i / (this.concHistory.length - 1)) * cw;
+                                const y = ch - (val / 100) * ch;
+                                if (i === 0) ctx.moveTo(x, y);
+                                else ctx.lineTo(x, y);
+                            });
+                            ctx.stroke();
                         }
                     }
                 }
 
-                // 最終的な補正値をStateに保存（タイピング処理で使用）
+                // 最終的な補正値をStateに保存
                 this.humanityState.delayMult = currentDelayMult;
                 this.humanityState.missMult = currentMissMult;
 
@@ -605,7 +657,7 @@
                 if (stddevEl) stddevEl.textContent = stdDev.toFixed(2);
             }
 
-            // --- グラフ描画 ---
+            // --- メインKPSグラフ描画 ---
             const canvas = this.execUiContainer.querySelector('#tt-kps-graph');
             if (this.canvasCtx && canvas) {
                 canvas.width = canvas.clientWidth;
@@ -675,7 +727,6 @@
             const max = Math.max(this.config.minDelay, this.config.maxDelay);
             let baseDelay = Math.floor(Math.random() * (max - min)) + min;
 
-            // ★全体の実効Delay計算 (すべての補正を統合済みのMultを乗算)
             if (this.config.humanitySim) {
                 baseDelay = Math.floor(baseDelay * this.humanityState.delayMult);
             }
@@ -791,7 +842,6 @@
 
                     const char = lineKeys[j];
 
-                    // ★全体の実効Miss Rate計算 (すべての補正を統合済みのMultを乗算)
                     let currentMissRate = this.config.missRate;
                     if (this.config.humanitySim) {
                         currentMissRate *= this.humanityState.missMult;
