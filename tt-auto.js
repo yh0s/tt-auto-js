@@ -1,3 +1,6 @@
+/**
+ * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示)
+ */
 (async function () {
     const DEFAULT_CONFIG = {
         minDelay: 200,
@@ -6,6 +9,11 @@
         checkInterval: 100,
         autoSkip: true,
         missRate: 0,
+        // --- 人間性シミュレーション設定 ---
+        humanitySim: false,
+        humanityFeatures: {
+            concentration: true // 集中力シミュレーションの個別ON/OFF状態
+        }
     };
 
     // --- 初期設定用UI作成クラス ---
@@ -79,6 +87,14 @@
                                 Auto Skip (ON / OFF)
                             </label>
                         </div>
+
+                        <div class="tt-auto-form-group checkbox-group" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+                            <label style="color: #d63384; font-weight: bold;">
+                                <input type="checkbox" id="tt-humanity-sim" ${this.config.humanitySim ? 'checked' : ''}>
+                                Humanity Simulation
+                            </label>
+                        </div>
+
                         <div class="tt-auto-actions">
                             <button class="tt-auto-btn cancel" id="tt-cancel-btn">Cancel</button>
                             <button class="tt-auto-btn" id="tt-start-btn">Start</button>
@@ -91,6 +107,7 @@
                 const maxInput = overlay.querySelector('#tt-max-delay');
                 const missInput = overlay.querySelector('#tt-miss-rate');
                 const autoSkipInput = overlay.querySelector('#tt-auto-skip');
+                const humanityInput = overlay.querySelector('#tt-humanity-sim');
                 const startBtn = overlay.querySelector('#tt-start-btn');
                 const cancelBtn = overlay.querySelector('#tt-cancel-btn');
 
@@ -133,6 +150,7 @@
                     this.config.maxDelay = newMax;
                     this.config.missRate = newMiss;
                     this.config.autoSkip = autoSkipInput.checked;
+                    this.config.humanitySim = humanityInput.checked;
 
                     cleanup();
                     resolve(this.config);
@@ -162,15 +180,11 @@
             this.isCancelled = false;
             this.isPaused = false;
 
-            // Live KPS計算用 (移動平均方式)
             this.isTypingLine = false;
             this.lastKeyTime = 0;
             this.recentIntervals = [];
 
-            // グラフ描画履歴
             this.kpsHistory = new Array(50).fill(0);
-
-            // Lifetime KPS と ばらつき計算用
             this.allKpsRecords = [];
 
             this.execUiContainer = null;
@@ -180,17 +194,32 @@
             this.isDragging = false;
             this.dragOffsetX = 0;
             this.dragOffsetY = 0;
-
             this.onMouseMove = this.handleMouseMove.bind(this);
             this.onMouseUp = this.handleMouseUp.bind(this);
+
+            // 人間性シミュレーション用の状態管理
+            this.humanityStartTime = Date.now();
+            this.humanityState = {
+                concentration: 100, // 0-100
+                delayMult: 1.0,     // 全要素を統合した最終的なDelay乗算値
+                missMult: 1.0       // 全要素を統合した最終的なMissRate乗算値
+            };
+            this.humanityUiContainer = null;
+            this.isHumanityDragging = false;
+            this.humanityDragOffsetX = 0;
+            this.humanityDragOffsetY = 0;
+            this.onHumanityMouseMove = this.handleHumanityMouseMove.bind(this);
+            this.onHumanityMouseUp = this.handleHumanityMouseUp.bind(this);
         }
 
+        // ==========================================
+        //  UI作成: メイン実行モーダル
+        // ==========================================
         createExecutionUI() {
             this.execUiContainer = document.createElement('div');
-            // 要素が増えたため少し高さを拡張
             this.execUiContainer.style.cssText = `
-                position: fixed; top: 20px; right: 20px; width: 310px; height: 260px;
-                min-width: 280px; min-height: 220px;
+                position: fixed; top: 20px; right: 20px; width: 310px; height: 280px;
+                min-width: 280px; min-height: 250px;
                 background: rgba(20, 20, 20, 0.85); color: #fff;
                 padding: 10px; border-radius: 8px; z-index: 99999;
                 font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
@@ -230,6 +259,13 @@
                     </label>
                 </div>
 
+                <div style="margin-bottom: 8px; flex-shrink: 0; font-size: 11px; border-top: 1px solid #444; padding-top: 6px;">
+                    <label style="cursor: pointer; display: flex; align-items: center; color: #d63384; font-weight: bold;">
+                        <input type="checkbox" id="tt-exec-humanity" ${this.config.humanitySim ? 'checked' : ''} style="margin-right: 6px;"> 
+                        Humanity Simulation
+                    </label>
+                </div>
+
                 <canvas id="tt-kps-graph" style="background: #000; border: 1px solid #444; border-radius: 4px; margin-bottom: 8px; flex-grow: 1; min-height: 0; width: 100%; box-sizing: border-box;"></canvas>
 
                 <div style="display: flex; gap: 5px; flex-shrink: 0; width: 100%;">
@@ -239,11 +275,13 @@
             `;
             document.body.appendChild(this.execUiContainer);
 
+            // メインUIのイベント設定
             const stepInput = this.execUiContainer.querySelector('#tt-exec-step');
             const minExecInput = this.execUiContainer.querySelector('#tt-exec-min');
             const maxExecInput = this.execUiContainer.querySelector('#tt-exec-max');
             const missExecInput = this.execUiContainer.querySelector('#tt-exec-miss');
             const autoSkipExec = this.execUiContainer.querySelector('#tt-exec-autoskip');
+            const humanityExec = this.execUiContainer.querySelector('#tt-exec-humanity');
             const pauseBtn = this.execUiContainer.querySelector('#tt-exec-pause');
             const cancelBtn = this.execUiContainer.querySelector('#tt-exec-cancel');
             const dragHandle = this.execUiContainer.querySelector('#tt-drag-handle');
@@ -276,6 +314,16 @@
                 this.config.autoSkip = e.target.checked;
             });
 
+            // 人間性シミュレーション全体のON/OFF
+            humanityExec.addEventListener('change', (e) => {
+                this.config.humanitySim = e.target.checked;
+                if (this.config.humanitySim) {
+                    this.createHumanityUI(); // ONにされたら表示
+                } else {
+                    this.removeHumanityUI(); // OFFにされたら非表示（内部状態は維持）
+                }
+            });
+
             pauseBtn.onclick = async () => {
                 if (this.isCancelled) return;
                 this.isPaused = !this.isPaused;
@@ -296,6 +344,7 @@
                 cancelBtn.style.background = "#6c757d";
             };
 
+            // メインUIのドラッグ
             dragHandle.addEventListener('mousedown', (e) => {
                 this.isDragging = true;
                 const rect = this.execUiContainer.getBoundingClientRect();
@@ -308,35 +357,223 @@
             const canvas = this.execUiContainer.querySelector('#tt-kps-graph');
             this.canvasCtx = canvas.getContext('2d');
             this.graphInterval = setInterval(() => this.updateGraph(), 200);
+
+            // 初期状態がONなら人間性モーダルも表示
+            if (this.config.humanitySim) {
+                this.createHumanityUI();
+            }
         }
 
+        // ==========================================
+        //  UI作成: 人間性シミュレーション情報モーダル
+        // ==========================================
+        createHumanityUI() {
+            if (this.humanityUiContainer) return;
+
+            this.humanityUiContainer = document.createElement('div');
+            this.humanityUiContainer.style.cssText = `
+                position: fixed; top: 20px; left: 20px; width: 250px; 
+                background: rgba(30, 20, 40, 0.9); color: #f8cce5;
+                padding: 10px; border-radius: 8px; z-index: 99998;
+                font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+                backdrop-filter: blur(4px); border: 1px solid #d63384;
+                display: flex; flex-direction: column;
+            `;
+
+            this.humanityUiContainer.innerHTML = `
+                <div id="tt-humanity-drag" style="font-size: 13px; font-weight: bold; margin-bottom: 10px; color: #d63384; cursor: move; user-select: none; border-bottom: 1px solid #d63384; padding-bottom: 4px;">
+                    🧬 Humanity Simulation (Drag)
+                </div>
+
+                <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px;">
+                    <div style="color: #aaa; margin-bottom: 4px;">[ Toggles ]</div>
+                    <label style="cursor: pointer; display: flex; align-items: center;">
+                        <input type="checkbox" id="tt-hum-toggle-conc" ${this.config.humanityFeatures.concentration ? 'checked' : ''} style="margin-right: 6px;"> 
+                        Concentration
+                    </label>
+                    <div style="color: #666; font-size: 9px; margin-left: 20px;">(今後追加予定の機能もここに並びます)</div>
+                </div>
+
+                <div id="tt-hum-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; min-height: 50px;">
+                    <div style="color: #aaa; margin-bottom: 4px;">[ Information ]</div>
+
+                    <div id="tt-hum-overall-status" style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #666;">
+                        <div style="display: flex; justify-content: space-between; color: #00FF00; font-weight: bold;">
+                            <span>Eff. KPS:</span> <span id="tt-hum-eff-kps">0.00 - 0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: #ddd;">
+                            <span>Eff. Delay:</span> <span id="tt-hum-eff-delay">0 - 0 ms</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: #FF4500;">
+                            <span>Eff. Miss:</span> <span id="tt-hum-eff-miss">0.0%</span>
+                        </div>
+                    </div>
+
+                    <div id="tt-hum-info-conc" style="display: ${this.config.humanityFeatures.concentration ? 'block' : 'none'};">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Focus Level:</span>
+                            <span id="tt-hum-val-conc" style="font-weight: bold; color: #fff;">100%</span>
+                        </div>
+                        <div style="width: 100%; background: #444; height: 6px; border-radius: 3px; margin: 3px 0 6px 0; overflow: hidden;">
+                            <div id="tt-hum-bar-conc" style="width: 100%; height: 100%; background: #00FF00; transition: width 0.5s, background-color 0.5s;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: #ccc;">
+                            <span>Delay Fix:</span> <span id="tt-hum-val-delay">x1.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: #ccc;">
+                            <span>Miss Fix:</span> <span id="tt-hum-val-miss">x1.00</span>
+                        </div>
+                    </div>
+                    <div id="tt-hum-info-none" style="display: ${this.config.humanityFeatures.concentration ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px;">
+                        No features enabled.
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(this.humanityUiContainer);
+
+            // トグルイベント
+            const concToggle = this.humanityUiContainer.querySelector('#tt-hum-toggle-conc');
+            const infoConc = this.humanityUiContainer.querySelector('#tt-hum-info-conc');
+            const infoNone = this.humanityUiContainer.querySelector('#tt-hum-info-none');
+
+            concToggle.addEventListener('change', (e) => {
+                this.config.humanityFeatures.concentration = e.target.checked;
+                if (this.config.humanityFeatures.concentration) {
+                    infoConc.style.display = 'block';
+                    infoNone.style.display = 'none';
+                } else {
+                    infoConc.style.display = 'none';
+                    infoNone.style.display = 'block';
+                }
+            });
+
+            // ドラッグイベント
+            const dragHandle = this.humanityUiContainer.querySelector('#tt-humanity-drag');
+            dragHandle.addEventListener('mousedown', (e) => {
+                this.isHumanityDragging = true;
+                const rect = this.humanityUiContainer.getBoundingClientRect();
+                this.humanityDragOffsetX = e.clientX - rect.left;
+                this.humanityDragOffsetY = e.clientY - rect.top;
+            });
+            document.addEventListener('mousemove', this.onHumanityMouseMove);
+            document.addEventListener('mouseup', this.onHumanityMouseUp);
+        }
+
+        removeHumanityUI() {
+            if (this.humanityUiContainer) {
+                document.removeEventListener('mousemove', this.onHumanityMouseMove);
+                document.removeEventListener('mouseup', this.onHumanityMouseUp);
+                this.humanityUiContainer.remove();
+                this.humanityUiContainer = null;
+            }
+        }
+
+        // --- ドラッグ制御 (メインUI) ---
         handleMouseMove(e) {
             if (!this.isDragging) return;
-
             let newX = e.clientX - this.dragOffsetX;
             let newY = e.clientY - this.dragOffsetY;
-
             const rect = this.execUiContainer.getBoundingClientRect();
             const maxX = window.innerWidth - rect.width;
             const maxY = window.innerHeight - rect.height;
-
-            if (newX < 0) newX = 0;
-            if (newY < 0) newY = 0;
-            if (newX > maxX) newX = maxX;
-            if (newY > maxY) newY = maxY;
-
-            this.execUiContainer.style.right = 'auto';
-            this.execUiContainer.style.bottom = 'auto';
-            this.execUiContainer.style.left = `${newX}px`;
-            this.execUiContainer.style.top = `${newY}px`;
+            if (newX < 0) newX = 0; if (newY < 0) newY = 0;
+            if (newX > maxX) newX = maxX; if (newY > maxY) newY = maxY;
+            this.execUiContainer.style.right = 'auto'; this.execUiContainer.style.bottom = 'auto';
+            this.execUiContainer.style.left = `${newX}px`; this.execUiContainer.style.top = `${newY}px`;
         }
+        handleMouseUp() { this.isDragging = false; }
 
-        handleMouseUp() {
-            this.isDragging = false;
+        // --- ドラッグ制御 (人間性UI) ---
+        handleHumanityMouseMove(e) {
+            if (!this.isHumanityDragging || !this.humanityUiContainer) return;
+            let newX = e.clientX - this.humanityDragOffsetX;
+            let newY = e.clientY - this.humanityDragOffsetY;
+            const rect = this.humanityUiContainer.getBoundingClientRect();
+            const maxX = window.innerWidth - rect.width;
+            const maxY = window.innerHeight - rect.height;
+            if (newX < 0) newX = 0; if (newY < 0) newY = 0;
+            if (newX > maxX) newX = maxX; if (newY > maxY) newY = maxY;
+            this.humanityUiContainer.style.right = 'auto'; this.humanityUiContainer.style.bottom = 'auto';
+            this.humanityUiContainer.style.left = `${newX}px`; this.humanityUiContainer.style.top = `${newY}px`;
         }
+        handleHumanityMouseUp() { this.isHumanityDragging = false; }
 
+        // ==========================================
+        //  状態更新 & グラフ描画
+        // ==========================================
         updateGraph() {
             if (this.isCancelled || this.isPaused || !this.isTypingLine) return;
+
+            // --- 人間性シミュレーションのリアルタイム計算 ---
+            if (this.config.humanitySim) {
+                // 毎フレームリセット（各機能の補正を掛け合わせていく）
+                let currentDelayMult = 1.0;
+                let currentMissMult = 1.0;
+
+                // 1. 集中力シミュレーション
+                if (this.config.humanityFeatures.concentration) {
+                    const elapsedSec = (Date.now() - this.humanityStartTime) / 1000;
+                    const wave1 = Math.sin(elapsedSec / 30 * Math.PI * 2);
+                    const wave2 = Math.sin(elapsedSec / 120 * Math.PI * 2);
+                    let conc = 75 + (wave1 * 15) + (wave2 * 10) + (Math.random() * 4 - 2);
+
+                    if (conc > 100) conc = 100;
+                    if (conc < 0) conc = 0;
+
+                    this.humanityState.concentration = conc;
+
+                    const concDelayMult = 1.5 - (conc / 100) * 0.7;
+                    const concMissMult = 2.5 - (conc / 100) * 2.0;
+
+                    // 補正値の乗算
+                    currentDelayMult *= concDelayMult;
+                    currentMissMult *= concMissMult;
+
+                    // 個別UIの更新
+                    if (this.humanityUiContainer) {
+                        const concValEl = this.humanityUiContainer.querySelector('#tt-hum-val-conc');
+                        const concBarEl = this.humanityUiContainer.querySelector('#tt-hum-bar-conc');
+                        const delayValEl = this.humanityUiContainer.querySelector('#tt-hum-val-delay');
+                        const missValEl = this.humanityUiContainer.querySelector('#tt-hum-val-miss');
+
+                        if (concValEl) concValEl.textContent = `${Math.round(conc)}%`;
+                        if (delayValEl) delayValEl.textContent = `x${concDelayMult.toFixed(2)}`;
+                        if (missValEl) missValEl.textContent = `x${concMissMult.toFixed(2)}`;
+
+                        if (concBarEl) {
+                            concBarEl.style.width = `${conc}%`;
+                            if (conc > 60) concBarEl.style.backgroundColor = '#00FF00';
+                            else if (conc > 30) concBarEl.style.backgroundColor = '#FFD700';
+                            else concBarEl.style.backgroundColor = '#FF4500';
+                        }
+                    }
+                }
+
+                // 最終的な補正値をStateに保存（タイピング処理で使用）
+                this.humanityState.delayMult = currentDelayMult;
+                this.humanityState.missMult = currentMissMult;
+
+                // --- Overall Status (Effective 値) の更新 ---
+                if (this.humanityUiContainer) {
+                    const effMinDelay = Math.round(this.config.minDelay * currentDelayMult);
+                    const effMaxDelay = Math.round(this.config.maxDelay * currentDelayMult);
+
+                    let effKpsMin = "---";
+                    let effKpsMax = "---";
+                    if (effMaxDelay > 0) effKpsMin = (1000 / effMaxDelay).toFixed(2);
+                    if (effMinDelay > 0) effKpsMax = (1000 / effMinDelay).toFixed(2);
+
+                    const effMissRate = (this.config.missRate * currentMissMult).toFixed(1);
+
+                    const effDelayEl = this.humanityUiContainer.querySelector('#tt-hum-eff-delay');
+                    const effKpsEl = this.humanityUiContainer.querySelector('#tt-hum-eff-kps');
+                    const effMissEl = this.humanityUiContainer.querySelector('#tt-hum-eff-miss');
+
+                    if (effDelayEl) effDelayEl.textContent = `${effMinDelay} - ${effMaxDelay} ms`;
+                    if (effKpsEl) effKpsEl.textContent = `${effKpsMin} - ${effKpsMax}`;
+                    if (effMissEl) effMissEl.textContent = `${effMissRate}%`;
+                }
+            }
 
             // --- Live KPS 計算 ---
             let kpsVal = 0;
@@ -359,7 +596,6 @@
                 const sumAll = this.allKpsRecords.reduce((a, b) => a + b, 0);
                 const lifetimeKps = sumAll / this.allKpsRecords.length;
 
-                // 標準偏差の計算 (分散の平方根)
                 const variance = this.allKpsRecords.reduce((a, b) => a + Math.pow(b - lifetimeKps, 2), 0) / this.allKpsRecords.length;
                 const stdDev = Math.sqrt(variance);
 
@@ -419,6 +655,7 @@
             if (this.execUiContainer && this.execUiContainer.parentNode) {
                 this.execUiContainer.parentNode.removeChild(this.execUiContainer);
             }
+            this.removeHumanityUI();
         }
 
         async delay(ms) {
@@ -436,7 +673,14 @@
         getRandomDelay() {
             const min = Math.min(this.config.minDelay, this.config.maxDelay);
             const max = Math.max(this.config.minDelay, this.config.maxDelay);
-            return Math.floor(Math.random() * (max - min)) + min;
+            let baseDelay = Math.floor(Math.random() * (max - min)) + min;
+
+            // ★全体の実効Delay計算 (すべての補正を統合済みのMultを乗算)
+            if (this.config.humanitySim) {
+                baseDelay = Math.floor(baseDelay * this.humanityState.delayMult);
+            }
+
+            return baseDelay;
         }
 
         getRandomWrongChar(correctChar) {
@@ -493,15 +737,11 @@
                     const now = Date.now();
                     if (this.lastKeyTime > 0) {
                         const interval = now - this.lastKeyTime;
-                        // 異常な間隔（一時停止直後など）は排除
                         if (interval < 3000) {
-                            // Live KPS用の間隔記録
                             this.recentIntervals.push(interval);
                             if (this.recentIntervals.length > 5) {
                                 this.recentIntervals.shift();
                             }
-
-                            // Lifetime KPS用の全記録
                             const instantKps = 1000 / interval;
                             this.allKpsRecords.push(instantKps);
                         }
@@ -522,6 +762,8 @@
         async typeKeys(keysList) {
             const baseTitle = "Typing...";
 
+            this.humanityStartTime = Date.now();
+
             for (let i = 0; i < keysList.length; i++) {
                 if (this.isCancelled) break;
 
@@ -531,7 +773,6 @@
                     await this.delay(100);
                 }
 
-                // 行開始時の初期化
                 this.isTypingLine = true;
                 this.lastKeyTime = 0;
                 this.recentIntervals = this.recentIntervals.slice(-2);
@@ -550,7 +791,13 @@
 
                     const char = lineKeys[j];
 
-                    if (this.config.missRate > 0 && (Math.random() * 100 < this.config.missRate)) {
+                    // ★全体の実効Miss Rate計算 (すべての補正を統合済みのMultを乗算)
+                    let currentMissRate = this.config.missRate;
+                    if (this.config.humanitySim) {
+                        currentMissRate *= this.humanityState.missMult;
+                    }
+
+                    if (currentMissRate > 0 && (Math.random() * 100 < currentMissRate)) {
                         const wrongChar = this.getRandomWrongChar(char);
                         document.title = `${baseTitle} ${wrongChar} (Miss!)`;
 
