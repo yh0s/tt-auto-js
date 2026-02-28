@@ -1047,7 +1047,6 @@
                 }
 
             } catch (e) {
-                console.error(e);
                 alert(`AutoTyper Error: ${e.message}`);
             } finally {
                 document.title = this.originalTitle;
