@@ -1,5 +1,5 @@
 /**
- * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ + 不得意キー特性 + 物理隣接ミスアルゴリズム + 仮想キーボード)
+ * タイピングゲーム自動化スクリプト (人間性シミュレート導入版 + 実効値表示 + 集中力グラフ + 不得意キー特性 + 物理隣接ミスアルゴリズム + 仮想キーボード + 自動Pause機能)
  * [Refactored Version]
  */
 (async function () {
@@ -18,7 +18,7 @@
         weakKeysList: [],
         weakKeysBase: 1.5,
         weakKeysVar: 0.2,
-        showKeyboard: false // 仮想キーボード表示フラグ
+        showKeyboard: false
     };
 
     // --- 定数データ ---
@@ -200,8 +200,8 @@
 
             this.execUiContainer = null;
             this.humanityUiContainer = null;
-            this.keyboardUiContainer = null; // 仮想キーボードUI
-            this.vkKeyElements = new Map();  // 仮想キーボード要素への参照
+            this.keyboardUiContainer = null;
+            this.vkKeyElements = new Map();
             this.canvasCtx = null;
             this.graphInterval = null;
 
@@ -209,7 +209,6 @@
             this.concHistory = new Array(50).fill(100);
             this.humanityState = { concentration: 100, delayMult: 1.0, missMult: 1.0 };
 
-            // クリーンアップ用コールバック配列
             this.cleanupCallbacks = [];
         }
 
@@ -217,9 +216,6 @@
         //  UI / DOM 操作ヘルパー
         // ==========================================
 
-        /**
-         * モーダルをドラッグ可能にする共通処理
-         */
         setupDraggable(modalElement, handleElement) {
             let isDragging = false;
             let offsetX = 0, offsetY = 0;
@@ -262,12 +258,30 @@
             });
         }
 
+        /**
+         * 実行の中断・再開を制御する共通メソッド
+         */
+        async setPauseState(state) {
+            if (this.isCancelled || this.isPaused === state) return;
+            this.isPaused = state;
+
+            if (this.execUiContainer) {
+                const pauseBtn = this.execUiContainer.querySelector('#tt-exec-pause');
+                if (pauseBtn) {
+                    pauseBtn.textContent = this.isPaused ? "Resume" : "Pause";
+                    pauseBtn.style.background = this.isPaused ? "#28a745" : "#007bff";
+                }
+            }
+
+            // ゲーム側に一時停止/再開を通知 (Escapeキー送信、KPS非集計、ミス判定なし)
+            await this.simulateKeydown("Escape", false, false);
+        }
+
         // ==========================================
         //  UI作成: メイン実行モーダル
         // ==========================================
         createExecutionUI() {
             this.execUiContainer = document.createElement('div');
-            // 要素が増えたため高さを拡張
             this.execUiContainer.style.cssText = `
                 position: fixed; top: 20px; right: 20px; width: 310px; height: 300px;
                 min-width: 280px; min-height: 270px;
@@ -336,11 +350,7 @@
 
             const pauseBtn = getEl('tt-exec-pause');
             pauseBtn.onclick = async () => {
-                if (this.isCancelled) return;
-                this.isPaused = !this.isPaused;
-                pauseBtn.textContent = this.isPaused ? "Resume" : "Pause";
-                pauseBtn.style.background = this.isPaused ? "#28a745" : "#007bff";
-                await this.simulateKeydown("Escape", false);
+                await this.setPauseState(!this.isPaused);
             };
 
             const cancelBtn = getEl('tt-exec-cancel');
@@ -364,7 +374,6 @@
             if (this.keyboardUiContainer) return;
 
             this.keyboardUiContainer = document.createElement('div');
-            // 画面の中央下部に初期配置
             const initLeft = Math.max(0, (window.innerWidth - 450) / 2);
             const initTop = Math.max(0, window.innerHeight - 250);
 
@@ -383,7 +392,6 @@
                 }).join('') + `</div>`
             ).join('');
 
-            // SPACE キーの追加
             gridHtml += `<div style="display: flex; justify-content: center; gap: 4px; margin-top: 4px;">
                 <div class="tt-vk-key" data-key="space" style="width: 200px; height: 28px; border: 1px solid #444; border-radius: 4px; background: #333; color: #fff; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 12px; transition: background 0.1s, transform 0.05s;">SPACE</div>
             </div>`;
@@ -397,13 +405,11 @@
 
             document.body.appendChild(this.keyboardUiContainer);
 
-            // 要素の参照をMapに保存して高速化
             this.vkKeyElements.clear();
             this.keyboardUiContainer.querySelectorAll('.tt-vk-key').forEach(el => {
                 this.vkKeyElements.set(el.getAttribute('data-key'), el);
             });
 
-            // ドラッグ設定
             this.setupDraggable(this.keyboardUiContainer, this.keyboardUiContainer.querySelector('#tt-vk-drag-handle'));
         }
 
@@ -478,8 +484,11 @@
             getEl('tt-hum-wk-var').addEventListener('change', e => { let v = parseFloat(e.target.value); this.config.weakKeysVar = isNaN(v) ? 0 : Math.max(0, v); });
         }
 
-        openWeakKeysModal() {
+        async openWeakKeysModal() {
             if (document.getElementById('tt-wk-modal')) return;
+
+            // ★モーダル表示時にタイピングを一時停止
+            await this.setPauseState(true);
 
             const overlay = document.createElement('div');
             overlay.id = 'tt-wk-modal';
@@ -523,12 +532,21 @@
                 };
             });
 
-            overlay.querySelector('#tt-wk-cancel').onclick = () => overlay.remove();
+            // ★モーダルを閉じる際の共通処理 (Resume)
+            const closeModalAndResume = async () => {
+                overlay.remove();
+                await this.setPauseState(false);
+            };
+
+            overlay.querySelector('#tt-wk-cancel').onclick = () => {
+                closeModalAndResume();
+            };
+
             overlay.querySelector('#tt-wk-save').onclick = () => {
                 this.config.weakKeysList = currentSelection;
                 const listEl = document.getElementById('tt-hum-wk-list');
                 if (listEl) listEl.textContent = this.config.weakKeysList.join(',').toUpperCase() || 'None';
-                overlay.remove();
+                closeModalAndResume();
             };
         }
 
@@ -545,7 +563,6 @@
         updateGraph() {
             if (this.isCancelled || this.isPaused || !this.isTypingLine) return;
 
-            // --- 人間性シミュレーションのリアルタイム計算 ---
             if (this.config.humanitySim) {
                 let currentDelayMult = 1.0;
                 let currentMissMult = 1.0;
@@ -629,7 +646,6 @@
                 }
             }
 
-            // --- Live KPS 計算 ---
             let kpsVal = 0;
             if (this.recentIntervals.length > 0) {
                 const sum = this.recentIntervals.reduce((a, b) => a + b, 0);
@@ -642,7 +658,6 @@
             const kpsText = this.execUiContainer.querySelector('#tt-kps-val');
             if (kpsText) kpsText.textContent = kpsVal.toFixed(2);
 
-            // --- Lifetime KPS & ばらつき 計算 ---
             if (this.allKpsRecords.length > 0) {
                 const sumAll = this.allKpsRecords.reduce((a, b) => a + b, 0);
                 const lifetimeKps = sumAll / this.allKpsRecords.length;
@@ -655,7 +670,6 @@
                 if (stddevEl) stddevEl.textContent = stdDev.toFixed(2);
             }
 
-            // --- メイングラフ描画 ---
             const canvas = this.execUiContainer.querySelector('#tt-kps-graph');
             if (this.canvasCtx && canvas) {
                 canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
@@ -686,7 +700,6 @@
         cleanupUI() {
             if (this.graphInterval) clearInterval(this.graphInterval);
 
-            // 登録した全イベントリスナーを解除
             this.cleanupCallbacks.forEach(cb => cb());
             this.cleanupCallbacks = [];
 
@@ -740,9 +753,6 @@
             return wrongChar;
         }
 
-        // ==========================================
-        //  仮想キーボード 発光処理
-        // ==========================================
         flashVirtualKey(key, isMiss) {
             if (!this.config.showKeyboard || !this.keyboardUiContainer) return;
 
@@ -751,11 +761,10 @@
 
             const el = this.vkKeyElements.get(keyId);
             if (el) {
-                el.style.background = isMiss ? '#FF4500' : '#00FF00'; // ミスは赤、正解は緑
+                el.style.background = isMiss ? '#FF4500' : '#00FF00';
                 el.style.color = '#000';
-                el.style.transform = 'scale(0.9)'; // 押されたように少し縮小
+                el.style.transform = 'scale(0.9)';
 
-                // 少し時間をおいて元に戻す
                 setTimeout(() => {
                     if (el) {
                         el.style.background = '#333';
@@ -780,11 +789,6 @@
             this.romajiData = this.controller.lyricsData?.typingRoma || [];
         }
 
-        /**
-         * @param {string} key 押下するキー
-         * @param {boolean} isTrackKps KPS集計に含めるか (AutoSkipなどは含めない)
-         * @param {boolean} isMiss ミス入力かどうか (仮想キーボードの色判定に使用)
-         */
         async simulateKeydown(key, isTrackKps = true, isMiss = false) {
             let code = `Key${key.toUpperCase()}`;
             let keyCode = key.toUpperCase().charCodeAt(0);
@@ -798,7 +802,6 @@
             if (this.controller && typeof this.controller._onKeydown === 'function') {
                 await this.controller._onKeydown(event);
 
-                // 仮想キーボードの色変更アニメーション
                 this.flashVirtualKey(key, isMiss);
 
                 if (isTrackKps && key.length === 1 && key !== " " && this.isTypingLine) {
@@ -865,7 +868,6 @@
                         const wrongChar = this.getRandomWrongChar(char);
                         document.title = `${baseTitle} ${wrongChar} (Miss!)`;
 
-                        // ミス入力 (第3引数をtrue)
                         await this.simulateKeydown(wrongChar, false, true);
                         await this.delay(this.getRandomDelay(weakPenalty));
                         j--;
@@ -873,7 +875,6 @@
                     }
 
                     document.title = `${baseTitle} ${char}`;
-                    // 正解入力 (第3引数をfalse)
                     await this.simulateKeydown(char, true, false);
                     await this.delay(this.getRandomDelay(weakPenalty));
                 }
