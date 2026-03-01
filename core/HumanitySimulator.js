@@ -1,3 +1,5 @@
+import { SYSTEM, HUMANITY_MATH } from '../config/constants.js';
+
 /**
  * 人間らしい揺らぎ（集中力・苦手キー）のシミュレーション計算を行うクラス
  */
@@ -5,8 +7,7 @@ export class HumanitySimulator {
     constructor(config) {
         this.config = config;
         this.startTime = Date.now();
-        this.concHistory = new Array(50).fill(100);
-        // 現在の状態をキャッシュして保持
+        this.concHistory = new Array(SYSTEM.GRAPH_HISTORY_SIZE).fill(100);
         this.state = {
             conc: 100,
             delayMult: 1.0,
@@ -15,12 +16,8 @@ export class HumanitySimulator {
         };
     }
 
-    /**
-     * 一定間隔（Tick）ごとに集中力と補正倍率を再計算する
-     */
     tick() {
         if (!this.config.humanitySim) {
-            // シミュレーションOFF時も一貫したデータを返す
             this.state = { conc: 100, delayMult: 1.0, missMult: 1.0, concHistory: [...this.concHistory] };
             return this.state;
         }
@@ -31,17 +28,19 @@ export class HumanitySimulator {
 
         if (this.config.humanityFeatures.concentration) {
             const elapsedSec = (Date.now() - this.startTime) / 1000;
-            // 30秒と120秒のサイン波を組み合わせたバイオリズム
-            const wave1 = Math.sin(elapsedSec / 30 * Math.PI * 2);
-            const wave2 = Math.sin(elapsedSec / 120 * Math.PI * 2);
-            conc = Math.max(0, Math.min(100, 75 + (wave1 * 15) + (wave2 * 10) + (Math.random() * 4 - 2)));
+            const wave1 = Math.sin(elapsedSec / HUMANITY_MATH.WAVE1_SEC * Math.PI * 2);
+            const wave2 = Math.sin(elapsedSec / HUMANITY_MATH.WAVE2_SEC * Math.PI * 2);
+            const noise = (Math.random() * HUMANITY_MATH.NOISE_AMP) - HUMANITY_MATH.NOISE_OFFSET;
+
+            conc = Math.max(0, Math.min(100, HUMANITY_MATH.CONC_BASE + (wave1 * HUMANITY_MATH.WAVE1_AMP) + (wave2 * HUMANITY_MATH.WAVE2_AMP) + noise));
 
             this.concHistory.push(conc);
-            if (this.concHistory.length > 50) this.concHistory.shift();
+            if (this.concHistory.length > SYSTEM.GRAPH_HISTORY_SIZE) {
+                this.concHistory.shift();
+            }
 
-            // 集中力が低いほど遅延とミス率が上昇
-            currentDelayMult *= 1.5 - (conc / 100) * 0.7;
-            currentMissMult *= 2.5 - (conc / 100) * 2.0;
+            currentDelayMult *= HUMANITY_MATH.DELAY_MULT_BASE - (conc / 100) * HUMANITY_MATH.DELAY_MULT_FACTOR;
+            currentMissMult *= HUMANITY_MATH.MISS_MULT_BASE - (conc / 100) * HUMANITY_MATH.MISS_MULT_FACTOR;
         }
 
         this.state = {
@@ -54,9 +53,6 @@ export class HumanitySimulator {
         return this.state;
     }
 
-    /**
-     * 指定された文字が苦手キーか判定し、ペナルティ倍率を返す
-     */
     getWeakPenalty(char) {
         if (!this.config.humanitySim || !this.config.humanityFeatures.weakKeys) return 1.0;
 

@@ -1,4 +1,4 @@
-import { SYMBOL_MAP } from '../config/constants.js';
+import { SYMBOL_MAP, SYSTEM } from '../config/constants.js';
 import { delay, getRandomDelay, getRandomWrongChar } from '../utils/typingUtils.js';
 import { StatsTracker } from './StatsTracker.js';
 import { HumanitySimulator } from './HumanitySimulator.js';
@@ -17,11 +17,9 @@ export class AutoTyper {
         this.isTransitionPanic = false;
         this.tickerInterval = null;
 
-        // ★ 状態管理を専門クラスに委譲
         this.stats = new StatsTracker();
         this.humanity = new HumanitySimulator(this.config);
 
-        // UIからの操作リクエストを購読
         this.eventBus.on('ui:action_pauseToggle', () => this.setPauseState(!this.isPaused));
         this.eventBus.on('ui:action_forcePause', (state) => this.setPauseState(state));
         this.eventBus.on('ui:action_cancel', () => { this.isCancelled = true; });
@@ -57,7 +55,6 @@ export class AutoTyper {
         this.tickerInterval = setInterval(() => {
             if (this.isCancelled || this.isPaused || !this.isTypingLine) return;
 
-            // ★ 各専門クラスから最新状態を取得してマージするだけ
             const humState = this.humanity.tick();
             const stState = this.stats.getStats();
 
@@ -66,7 +63,7 @@ export class AutoTyper {
                 ...humState,
                 ...stState
             });
-        }, 200);
+        }, SYSTEM.TICK_INTERVAL_MS);
     }
 
     async simulateKeydown(key, isTrackKps = true, isMiss = false) {
@@ -91,11 +88,9 @@ export class AutoTyper {
 
         if (this.controller && typeof this.controller._onKeydown === 'function') {
             await this.controller._onKeydown(event);
-
             this.eventBus.emit('typer:keydown', { key, isMiss });
 
             if (isTrackKps && key.length === 1 && key !== " " && this.isTypingLine) {
-                // ★ 打鍵の記録をStatsTrackerに委譲
                 this.stats.recordKey();
             }
         }
@@ -113,7 +108,9 @@ export class AutoTyper {
             if (this.isCancelled) break;
             const lineKeys = keysList[i];
 
-            while (this.isPaused && !this.isCancelled) await delay(100, () => this.isCancelled);
+            while (this.isPaused && !this.isCancelled) {
+                await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
+            }
 
             if (this.config.humanitySim && this.config.humanityFeatures.transPanic && this.isTransitionPanic) {
                 const v = (Math.random() * 2 - 1) * this.config.panicDelayVar;
@@ -123,13 +120,13 @@ export class AutoTyper {
             }
 
             this.isTypingLine = true;
-            this.stats.resetLine(); // ★ 行の切り替わりでのリセット処理を委譲
+            this.stats.resetLine();
 
             for (let j = 0; j < lineKeys.length; j++) {
                 if (this.isCancelled) break;
                 while (this.isPaused && !this.isCancelled) {
-                    await delay(100, () => this.isCancelled);
-                    this.stats.resetLine(); // ★ ポーズ中の間隔リセット
+                    await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
+                    this.stats.resetLine();
                 }
                 if (this.isCancelled) break;
 
@@ -140,7 +137,6 @@ export class AutoTyper {
                 let weakPenalty = 1.0;
 
                 if (this.config.humanitySim) {
-                    // ★ HumanitySimulatorから状態とペナルティを取得
                     currentMissRate *= this.humanity.state.missMult;
                     weakPenalty = this.humanity.getWeakPenalty(char);
                     currentMissRate *= weakPenalty;
@@ -164,7 +160,9 @@ export class AutoTyper {
             this.isTypingLine = false;
 
             if (this.isCancelled) break;
-            while (this.isPaused && !this.isCancelled) await delay(100, () => this.isCancelled);
+            while (this.isPaused && !this.isCancelled) {
+                await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
+            }
 
             if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
                 await this.simulateKeydown(" ", false, false);
@@ -180,7 +178,7 @@ export class AutoTyper {
     async run() {
         try {
             this.init();
-            this.startTicker(); // ★ 状態送信ループ開始
+            this.startTicker();
 
             while (!this.controller._lyricsReady) {
                 if (this.isCancelled) break;

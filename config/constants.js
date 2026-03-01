@@ -2,7 +2,6 @@
  * 定数定義ファイル
  */
 
-// デフォルト設定値
 export const DEFAULT_CONFIG = {
     minDelay: 200,
     maxDelay: 300,
@@ -14,16 +13,42 @@ export const DEFAULT_CONFIG = {
     humanityFeatures: {
         concentration: true,
         weakKeys: false,
-        transPanic: false // ★追加: 強制遷移時のパニックシミュレーション
+        transPanic: false
     },
     weakKeysList: [],
     weakKeysBase: 1.5,
     weakKeysVar: 0.2,
-    panicDelayBase: 600, // ★追加: 遷移時の反応遅延(ms)の基準値
-    panicDelayVar: 200,  // ★追加: 遷移時の反応遅延(ms)のランダム変動幅
+    panicDelayBase: 600,
+    panicDelayVar: 200,
     showKeyboard: false,
-    debugMode: false,    // ★追加: デバッグモード
-    debugFeatures: {}    // ★追加: デバッグ機能の詳細設定用
+    debugMode: false,
+    debugFeatures: {}
+};
+
+// ★ 新規追加: システム設定とマジックナンバー
+export const SYSTEM = {
+    TICK_INTERVAL_MS: 200,          // 状態更新ループの周期
+    POLL_INTERVAL_MS: 100,          // 一時停止中などの待機ポーリング間隔
+    MAX_VALID_KEY_INTERVAL: 3000,   // KPS計算に含める最大打鍵間隔(ms)
+    RECENT_KPS_SAMPLE_SIZE: 5,      // Live KPS計算に使用する直近の打鍵数
+    LINE_RESET_RETAIN: 2,           // 行リセット時に保持する打鍵間隔の数
+    GRAPH_HISTORY_SIZE: 50,         // グラフ描画用の履歴保持数
+    MIN_GRAPH_Y_AXIS_KPS: 10        // KPSグラフY軸の最小最大値
+};
+
+// ★ 新規追加: 人間性シミュレーションの数学的係数
+export const HUMANITY_MATH = {
+    CONC_BASE: 75,             // 集中力の基準値
+    WAVE1_SEC: 30,             // サイン波1の周期(秒)
+    WAVE1_AMP: 15,             // サイン波1の振幅
+    WAVE2_SEC: 120,            // サイン波2の周期(秒)
+    WAVE2_AMP: 10,             // サイン波2の振幅
+    NOISE_AMP: 4,              // ランダムノイズの振幅
+    NOISE_OFFSET: 2,           // ランダムノイズのオフセット
+    DELAY_MULT_BASE: 1.5,      // 遅延倍率のベース
+    DELAY_MULT_FACTOR: 0.7,    // 遅延倍率の集中力影響係数
+    MISS_MULT_BASE: 2.5,       // ミス率倍率のベース
+    MISS_MULT_FACTOR: 2.0      // ミス率倍率の集中力影響係数
 };
 
 // キーボードレイアウト定義

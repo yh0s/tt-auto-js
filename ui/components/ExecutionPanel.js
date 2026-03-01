@@ -1,3 +1,4 @@
+import { SYSTEM } from '../../config/constants.js';
 import { setupDraggable } from '../../utils/domUtils.js';
 import { getExecutionStyle, getExecutionHTML } from '../templates/ExecutionTemplate.js';
 
@@ -81,7 +82,9 @@ export class ExecutionPanel {
             const ctx = this.canvasCtx;
 
             ctx.clearRect(0, 0, width, height);
-            const maxKps = Math.max(10, Math.ceil(Math.max(...state.kpsHistory)));
+
+            // ★定数を適用
+            const maxKps = Math.max(SYSTEM.MIN_GRAPH_Y_AXIS_KPS, Math.ceil(Math.max(...state.kpsHistory)));
 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'; ctx.font = '10px monospace';
             ctx.textBaseline = 'top'; ctx.fillText(`Max: ${maxKps}`, 4, 4);
