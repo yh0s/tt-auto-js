@@ -85,6 +85,26 @@
         '\?': ['\>', '.', '/', '\_', '\\']
     };
 
+    // ★ パフォーマンス改善: 静的データとして外出し
+    const SYMBOL_MAP = {
+        '-': { c: 'Minus', k: 189 },
+        '^': { c: 'Equal', k: 222 },
+        '\\': { c: 'IntlYen', k: 220 },
+        '@': { c: 'BracketLeft', k: 192 },
+        '[': { c: 'BracketLeft', k: 219 },
+        ';': { c: 'Semicolon', k: 187 },
+        ':': { c: 'Quote', k: 186 },
+        ']': { c: 'BracketRight', k: 221 },
+        ',': { c: 'Comma', k: 188 },
+        '.': { c: 'Period', k: 190 },
+        '/': { c: 'Slash', k: 191 },
+        '_': { c: 'IntlRo', k: 226 },
+        '!': { c: 'Digit1', k: 49, s: true },
+        '"': { c: 'Digit2', k: 50, s: true },
+        '\'': { c: 'Digit7', k: 55, s: true },
+        '?': { c: 'Slash', k: 191, s: true }
+    };
+
     // --- 初期設定用UI作成クラス ---
     class ConfigModal {
         constructor(defaultConfig) {
@@ -828,14 +848,52 @@
         }
 
         async simulateKeydown(key, isTrackKps = true, isMiss = false) {
-            let code = `Key${key.toUpperCase()}`;
-            let keyCode = key.toUpperCase().charCodeAt(0);
+            let code, keyCode, shiftKey = false;
+            const upperKey = key.toUpperCase();
 
-            if (key === "F4") { code = "F4"; keyCode = 115; }
-            else if (key === "Escape") { code = "Escape"; keyCode = 27; }
-            else if (key === " ") { code = "Space"; keyCode = 32; }
+            /* 1. 特殊キーの個別処理 */
+            if (key === "F4") {
+                code = "F4"; keyCode = 115;
+            } else if (key === "Escape") {
+                code = "Escape"; keyCode = 27;
+            } else if (key === " ") {
+                code = "Space"; keyCode = 32;
+            }
+            /* 2. アルファベット入力 ([a-zA-Z]) */
+            else if (/^[a-zA-Z]$/.test(key)) {
+                code = "Key" + upperKey;
+                keyCode = upperKey.charCodeAt(0);
+                /* 大文字の場合はShiftフラグを立てる */
+                if (key === upperKey && key !== key.toLowerCase()) shiftKey = true;
+            }
+            /* 3. 数字入力 ([0-9]) */
+            else if (/^[0-9]$/.test(key)) {
+                code = "Digit" + key;
+                keyCode = key.charCodeAt(0);
+            }
+            /* 4. 記号入力 */
+            else {
+                const data = SYMBOL_MAP[key];
+                if (data) {
+                    code = data.c;
+                    keyCode = data.k;
+                    shiftKey = data.s || false;
+                } else {
+                    /* マップにない記号へのフォールバック */
+                    code = "Key" + upperKey;
+                    keyCode = upperKey.charCodeAt(0);
+                }
+            }
 
-            const event = new KeyboardEvent("keydown", { key, code, keyCode, bubbles: true, cancelable: true });
+            /* 構築したプロパティでKeyboardEventを生成 */
+            const event = new KeyboardEvent("keydown", {
+                key,
+                code,
+                keyCode,
+                shiftKey,
+                bubbles: true,
+                cancelable: true
+            });
 
             if (this.controller && typeof this.controller._onKeydown === 'function') {
                 await this.controller._onKeydown(event);
