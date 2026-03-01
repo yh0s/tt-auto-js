@@ -2,8 +2,9 @@ import { QWERTY_KEYS } from '../../config/constants.js';
 import { setupDraggable } from '../../utils/domUtils.js';
 
 export class KeyboardPanel {
-    constructor(config) {
+    constructor(config, eventBus) {
         this.config = config;
+        this.eventBus = eventBus;
         this.container = null;
         this.vkKeyElements = new Map();
         this.cleanupDrag = null;

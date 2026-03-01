@@ -5,18 +5,31 @@ import { HumanityPanel } from './components/HumanityPanel.js';
 import { WeakKeysModal } from './components/WeakKeysModal.js';
 
 export class UIManager {
-    constructor(typer) {
-        this.typer = typer;
-        this.config = typer.config;
+    constructor(config, eventBus) {
+        this.config = config;
+        this.eventBus = eventBus;
 
-        // 各UIコンポーネントのインスタンス化
-        this.executionPanel = new ExecutionPanel(this.typer, this);
-        this.debugPanel = new DebugPanel(this.config);
-        this.keyboardPanel = new KeyboardPanel(this.config);
-        this.humanityPanel = new HumanityPanel(this.typer, this);
-        this.weakKeysModal = new WeakKeysModal(this.typer, this);
+        this.executionPanel = new ExecutionPanel(config, eventBus);
+        this.debugPanel = new DebugPanel(config, eventBus);
+        this.keyboardPanel = new KeyboardPanel(config, eventBus);
+        this.humanityPanel = new HumanityPanel(config, eventBus);
+        this.weakKeysModal = new WeakKeysModal(config, eventBus);
 
-        this.graphInterval = null;
+        // --- AutoTyperからのイベントをパネルにルーティング ---
+        this.eventBus.on('typer:pauseChanged', (isPaused) => this.executionPanel.updatePauseUI(isPaused));
+        this.eventBus.on('typer:keydown', (data) => this.keyboardPanel.flashKey(data.key, data.isMiss));
+        this.eventBus.on('typer:finished', () => this.cleanupUI());
+
+        this.eventBus.on('typer:tick', (state) => {
+            if (this.config.humanitySim) this.humanityPanel.updateStatus(state);
+            this.executionPanel.updateGraph(state);
+        });
+
+        // --- パネルから発火されるUI表示切替イベントのハンドリング ---
+        this.eventBus.on('ui:toggleHumanity', (show) => show ? this.humanityPanel.create() : this.humanityPanel.remove());
+        this.eventBus.on('ui:toggleKeyboard', (show) => show ? this.keyboardPanel.create() : this.keyboardPanel.remove());
+        this.eventBus.on('ui:toggleDebug', (show) => show ? this.debugPanel.create() : this.debugPanel.remove());
+        this.eventBus.on('ui:openWeakKeys', () => this.weakKeysModal.open());
     }
 
     initAllUI() {
@@ -24,53 +37,9 @@ export class UIManager {
         if (this.config.humanitySim) this.humanityPanel.create();
         if (this.config.showKeyboard) this.keyboardPanel.create();
         if (this.config.debugMode) this.debugPanel.create();
-
-        this.graphInterval = setInterval(() => this.updateGraph(), 200);
-    }
-
-    updatePauseUI(isPaused) {
-        this.executionPanel.updatePauseUI(isPaused);
-    }
-
-    flashVirtualKey(key, isMiss) {
-        this.keyboardPanel.flashKey(key, isMiss);
-    }
-
-    updateGraph() {
-        if (this.typer.isCancelled || this.typer.isPaused || !this.typer.isTypingLine) return;
-
-        // 人間性UIの更新
-        if (this.config.humanitySim) {
-            this.humanityPanel.updateStatus();
-        }
-
-        // メインKPSグラフの更新
-        this.executionPanel.updateGraph();
-    }
-
-    // --- コンポーネントからのトグル指示を受け受けるメソッド ---
-
-    toggleHumanity(show) {
-        if (show) this.humanityPanel.create();
-        else this.humanityPanel.remove();
-    }
-
-    toggleKeyboard(show) {
-        if (show) this.keyboardPanel.create();
-        else this.keyboardPanel.remove();
-    }
-
-    toggleDebug(show) {
-        if (show) this.debugPanel.create();
-        else this.debugPanel.remove();
-    }
-
-    openWeakKeysModal() {
-        this.weakKeysModal.open();
     }
 
     cleanupUI() {
-        if (this.graphInterval) clearInterval(this.graphInterval);
         this.executionPanel.remove();
         this.humanityPanel.remove();
         this.keyboardPanel.remove();

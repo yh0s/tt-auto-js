@@ -1,8 +1,9 @@
 import { setupDraggable } from '../../utils/domUtils.js';
 
 export class DebugPanel {
-    constructor(config) {
+    constructor(config, eventBus) {
         this.config = config;
+        this.eventBus = eventBus;
         this.container = null;
         this.cleanupDrag = null;
     }

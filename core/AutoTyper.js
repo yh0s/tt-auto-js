@@ -1,11 +1,10 @@
 import { SYMBOL_MAP } from '../config/constants.js';
 import { delay, getRandomDelay, getRandomWrongChar } from '../utils/typingUtils.js';
-import { UIManager } from '../ui/UIManager.js';
 
-// 自動化システム（タイピング制御メインロジック）
 export class AutoTyper {
-    constructor(config) {
+    constructor(config, eventBus) {
         this.config = config;
+        this.eventBus = eventBus;
         this.controller = null;
         this.romajiData = [];
         this.originalTitle = document.title;
@@ -23,19 +22,25 @@ export class AutoTyper {
         this.humanityStartTime = Date.now();
         this.concHistory = new Array(50).fill(100);
         this.humanityState = { concentration: 100, delayMult: 1.0, missMult: 1.0 };
+        this.tickerInterval = null;
 
-        // ★ UIマネージャーの初期化
-        this.ui = new UIManager(this);
+        // UIからの操作リクエストを購読
+        this.eventBus.on('ui:action_pauseToggle', () => this.setPauseState(!this.isPaused));
+        this.eventBus.on('ui:action_forcePause', (state) => this.setPauseState(state));
+        this.eventBus.on('ui:action_cancel', () => { this.isCancelled = true; });
+        this.eventBus.on('ui:weakKeysSave', (keys) => {
+            this.config.weakKeysList = keys;
+            this.eventBus.emit('ui:weakKeysUpdated', keys); // UIに更新をブロードキャスト
+        });
     }
 
     async setPauseState(state) {
         if (this.controller && this.controller.youtubeController && this.controller.youtubeController.player && this.controller.youtubeController.player.getCurrentTime() === 0) return;
-
         if (this.isCancelled || this.isPaused === state) return;
         this.isPaused = state;
 
-        // UIへの反映を委譲
-        this.ui.updatePauseUI(this.isPaused);
+        // 状態変更をUIに通知
+        this.eventBus.emit('typer:pauseChanged', this.isPaused);
 
         await this.simulateKeydown("Escape", false, false);
     }
@@ -53,6 +58,63 @@ export class AutoTyper {
         this.romajiData = this.controller.lyricsData?.typingRoma || [];
     }
 
+    // ★状態計算とUIへのデータ送信ループ
+    startTicker() {
+        this.tickerInterval = setInterval(() => {
+            if (this.isCancelled || this.isPaused || !this.isTypingLine) return;
+
+            let currentDelayMult = 1.0;
+            let currentMissMult = 1.0;
+            let conc = 100;
+
+            if (this.config.humanitySim && this.config.humanityFeatures.concentration) {
+                const elapsedSec = (Date.now() - this.humanityStartTime) / 1000;
+                const wave1 = Math.sin(elapsedSec / 30 * Math.PI * 2);
+                const wave2 = Math.sin(elapsedSec / 120 * Math.PI * 2);
+                conc = Math.max(0, Math.min(100, 75 + (wave1 * 15) + (wave2 * 10) + (Math.random() * 4 - 2)));
+
+                this.humanityState.concentration = conc;
+                this.concHistory.push(conc);
+                if (this.concHistory.length > 50) this.concHistory.shift();
+
+                currentDelayMult *= 1.5 - (conc / 100) * 0.7;
+                currentMissMult *= 2.5 - (conc / 100) * 2.0;
+            }
+
+            this.humanityState.delayMult = currentDelayMult;
+            this.humanityState.missMult = currentMissMult;
+
+            let kpsVal = 0;
+            if (this.recentIntervals.length > 0) {
+                const sum = this.recentIntervals.reduce((a, b) => a + b, 0);
+                if (sum > 0) kpsVal = 1000 / (sum / this.recentIntervals.length);
+            }
+            this.kpsHistory.push(kpsVal);
+            if (this.kpsHistory.length > 50) this.kpsHistory.shift();
+
+            let lifetimeKps = 0, stdDev = 0;
+            if (this.allKpsRecords.length > 0) {
+                const sumAll = this.allKpsRecords.reduce((a, b) => a + b, 0);
+                lifetimeKps = sumAll / this.allKpsRecords.length;
+                const variance = this.allKpsRecords.reduce((a, b) => a + Math.pow(b - lifetimeKps, 2), 0) / this.allKpsRecords.length;
+                stdDev = Math.sqrt(variance);
+            }
+
+            // 統計情報をイベントバスで送信
+            this.eventBus.emit('typer:tick', {
+                isTransitionPanic: this.isTransitionPanic,
+                conc,
+                concHistory: [...this.concHistory],
+                delayMult: currentDelayMult,
+                missMult: currentMissMult,
+                kpsVal,
+                kpsHistory: [...this.kpsHistory],
+                lifetimeKps,
+                stdDev
+            });
+        }, 200);
+    }
+
     async simulateKeydown(key, isTrackKps = true, isMiss = false) {
         let code, keyCode, shiftKey = false;
         const upperKey = key.toUpperCase();
@@ -64,16 +126,11 @@ export class AutoTyper {
             code = "Key" + upperKey; keyCode = upperKey.charCodeAt(0);
             if (key === upperKey && key !== key.toLowerCase()) shiftKey = true;
         }
-        else if (/^[0-9]$/.test(key)) {
-            code = "Digit" + key; keyCode = key.charCodeAt(0);
-        }
+        else if (/^[0-9]$/.test(key)) { code = "Digit" + key; keyCode = key.charCodeAt(0); }
         else {
             const data = SYMBOL_MAP[key];
-            if (data) {
-                code = data.c; keyCode = data.k; shiftKey = data.s || false;
-            } else {
-                code = "Key" + upperKey; keyCode = upperKey.charCodeAt(0);
-            }
+            if (data) { code = data.c; keyCode = data.k; shiftKey = data.s || false; }
+            else { code = "Key" + upperKey; keyCode = upperKey.charCodeAt(0); }
         }
 
         const event = new KeyboardEvent("keydown", { key, code, keyCode, shiftKey, bubbles: true, cancelable: true });
@@ -81,8 +138,8 @@ export class AutoTyper {
         if (this.controller && typeof this.controller._onKeydown === 'function') {
             await this.controller._onKeydown(event);
 
-            // ★ UI側への通知
-            this.ui.flashVirtualKey(key, isMiss);
+            // 打鍵イベントの送信 (仮想キーボード点滅用など)
+            this.eventBus.emit('typer:keydown', { key, isMiss });
 
             if (isTrackKps && key.length === 1 && key !== " " && this.isTypingLine) {
                 const now = Date.now();
@@ -103,9 +160,6 @@ export class AutoTyper {
         if (!Array.isArray(this.romajiData)) return [];
         return this.romajiData.map(line => Array.isArray(line) ? line.join("").split("") : String(line).split(""));
     }
-
-    // キャンセル判定用ヘルパー
-    isCanceled() { return this.isCancelled; }
 
     async typeKeys(keysList) {
         const baseTitle = "Typing...";
@@ -130,16 +184,10 @@ export class AutoTyper {
 
             for (let j = 0; j < lineKeys.length; j++) {
                 if (this.isCancelled) break;
-
-                while (this.isPaused && !this.isCancelled) {
-                    await delay(100, () => this.isCancelled);
-                    this.lastKeyTime = 0;
-                }
+                while (this.isPaused && !this.isCancelled) { await delay(100, () => this.isCancelled); this.lastKeyTime = 0; }
                 if (this.isCancelled) break;
 
-                if ((this.controller.count - 1) > i) {
-                    this.isTransitionPanic = true; break;
-                }
+                if ((this.controller.count - 1) > i) { this.isTransitionPanic = true; break; }
 
                 const char = lineKeys[j];
                 let currentMissRate = this.config.missRate;
@@ -172,7 +220,6 @@ export class AutoTyper {
             this.isTypingLine = false;
 
             if (this.isCancelled) break;
-
             while (this.isPaused && !this.isCancelled) await delay(100, () => this.isCancelled);
 
             if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
@@ -189,9 +236,7 @@ export class AutoTyper {
     async run() {
         try {
             this.init();
-
-            // ★ UIの初期化を委譲
-            this.ui.initAllUI();
+            this.startTicker(); // 状態送信ループ開始
 
             while (!this.controller._lyricsReady) {
                 if (this.isCancelled) break;
@@ -224,7 +269,8 @@ export class AutoTyper {
             alert(`AutoTyper Error: ${e.message}`);
         } finally {
             document.title = this.originalTitle;
-            this.ui.cleanupUI();
+            if (this.tickerInterval) clearInterval(this.tickerInterval);
+            this.eventBus.emit('typer:finished'); // UIのクリーンアップ指示
         }
     }
 }

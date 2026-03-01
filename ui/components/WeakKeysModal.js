@@ -1,17 +1,17 @@
 import { QWERTY_KEYS } from '../../config/constants.js';
 
 export class WeakKeysModal {
-    constructor(typer, uiManager) {
-        this.typer = typer;
-        this.uiManager = uiManager;
-        this.config = typer.config;
+    constructor(config, eventBus) {
+        this.config = config;
+        this.eventBus = eventBus;
         this.overlay = null;
     }
 
-    async open() {
+    open() {
         if (this.overlay) return;
 
-        await this.typer.setPauseState(true);
+        // ★UI側から強制Pauseイベントを発火
+        this.eventBus.emit('ui:action_forcePause', true);
 
         this.overlay = document.createElement('div');
         this.overlay.id = 'tt-wk-modal';
@@ -58,22 +58,15 @@ export class WeakKeysModal {
         this.overlay.querySelector('#tt-wk-cancel').onclick = () => this.close();
 
         this.overlay.querySelector('#tt-wk-save').onclick = () => {
-            this.config.weakKeysList = currentSelection;
-            // HumanityPanelの表示を更新
-            if (this.uiManager.humanityPanel && this.uiManager.humanityPanel.container) {
-                const listEl = this.uiManager.humanityPanel.container.querySelector('#tt-hum-wk-list');
-                if (listEl) listEl.textContent = this.config.weakKeysList.join(',').toUpperCase() || 'None';
-            }
+            // ★保存完了イベントを送信
+            this.eventBus.emit('ui:weakKeysSave', currentSelection);
             this.close();
         };
     }
 
-    async close() {
-        if (this.overlay) {
-            this.overlay.remove();
-            this.overlay = null;
-        }
-        await this.typer.setPauseState(false);
+    close() {
+        this.remove();
+        this.eventBus.emit('ui:action_forcePause', false);
     }
 
     remove() {
