@@ -110,29 +110,37 @@ export class AutoTyper {
         }
     }
 
-    // ★変更: 文字単体ではなく、{ char, isComboNext } のオブジェクト配列を返す
     generateKeysList() {
         if (!Array.isArray(this.romajiData)) return [];
         return this.romajiData.map(line => {
             let keys = [];
             if (Array.isArray(line)) {
-                // TypingTubeのルビ単位配列（例: ["ka", "n", "ji"]）を処理
                 line.forEach(chunk => {
                     const chars = String(chunk).split("");
                     chars.forEach((c, idx) => {
                         keys.push({
                             char: c,
-                            isComboNext: idx > 0 // 2文字目以降は高速コンボ
+                            isComboNext: idx > 0
                         });
                     });
                 });
             } else {
-                // 文字列の場合はフォールバック
                 const chars = String(line).split("");
                 chars.forEach(c => keys.push({ char: c, isComboNext: false }));
             }
             return keys;
         });
+    }
+
+    // ===============================================
+    // ★追加: 自動スキップを実行するかどうかの判断ロジック
+    // ===============================================
+    shouldExecuteAutoSkip() {
+        const lyricsArray = controller.lyricsData.lyricsArray;
+        if ((lyricsArray[controller.count][0] - controller.headTime) / controller.speed > 3 && (controller.completed || 0 === controller.nextChar.length)) {
+            return true;
+        }
+        return false;
     }
 
     async typeKeys(keysList) {
@@ -179,7 +187,6 @@ export class AutoTyper {
 
                                 document.title = `${baseTitle} ${char} (Overrun!)`;
                                 await this.simulateKeydown(char, false, true);
-                                // オーバーラン時の焦り(0.8倍)とコンボ判定を組み合わせて遅延
                                 await delay(getRandomDelay(this.config, this.humanity.state, 0.8, isCombo), () => this.isCancelled);
                             }
                         }
@@ -187,7 +194,6 @@ export class AutoTyper {
                     this.isTransitionPanic = true; break;
                 }
 
-                // ★変更: オブジェクトから文字とコンボフラグを取り出す
                 const charObj = lineKeys[j];
                 const char = charObj.char;
                 const isCombo = charObj.isComboNext && this.config.humanitySim && this.config.humanityFeatures.romajiCombo;
@@ -201,23 +207,19 @@ export class AutoTyper {
                     currentMissRate *= weakPenalty;
                 }
 
-                // ミスタイプ発生
                 if (currentMissRate > 0 && (Math.random() * 100 < currentMissRate)) {
                     const wrongChar = getRandomWrongChar(char);
                     document.title = `${baseTitle} ${wrongChar} (Miss!)`;
 
                     await this.simulateKeydown(wrongChar, false, true);
-                    // ミスするとリズムが崩れるため、コンボは無効(false)として遅延を発生させる
                     await delay(getRandomDelay(this.config, this.humanity.state, weakPenalty, false), () => this.isCancelled);
                     j--;
                     continue;
                 }
 
-                // 正常入力
                 document.title = `${baseTitle} ${char}`;
                 await this.simulateKeydown(char, true, false);
 
-                // ★変更: isCombo を引数に渡して遅延を決定する
                 await delay(getRandomDelay(this.config, this.humanity.state, weakPenalty, isCombo), () => this.isCancelled);
             }
 
@@ -228,8 +230,13 @@ export class AutoTyper {
                 await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
             }
 
+            // ===============================================
+            // ★変更: スキップ実行前に shouldExecuteAutoSkip() を評価する
+            // ===============================================
             if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
-                await this.simulateKeydown(" ", false, false);
+                if (this.shouldExecuteAutoSkip()) {
+                    await this.simulateKeydown(" ", false, false);
+                }
             }
 
             while ((this.controller.count - 1) === i) {
