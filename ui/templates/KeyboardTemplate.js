@@ -7,12 +7,19 @@ export const getKeyboardStyle = (initLeft, initTop) => `
     user-select: none; display: flex; flex-direction: column;
 `;
 
-export const getKeyboardHTML = () => {
+export const getKeyboardHTML = (weakKeysList = []) => {
     let gridHtml = QWERTY_KEYS.map(row =>
         `<div style="display: flex; justify-content: center; gap: 4px; margin-bottom: 4px;">` +
         row.map(k => {
             const safeK = k.replace(/"/g, '&quot;');
-            return `<div class="tt-vk-key" data-key="${safeK}" style="width: 28px; height: 28px; border: 1px solid #444; border-radius: 4px; background: #333; color: #fff; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 12px; transition: background 0.1s, transform 0.05s;">${k.toUpperCase()}</div>`;
+
+            // ★追加: 不得意キーかどうかの判定とスタイルの分岐
+            const isWeak = weakKeysList.includes(k);
+            const borderCol = isWeak ? '#d63384' : '#444';
+            const bgCol = isWeak ? '#4a2a38' : '#333';
+            const textCol = isWeak ? '#ffb3d9' : '#fff';
+
+            return `<div class="tt-vk-key" data-key="${safeK}" style="width: 28px; height: 28px; border: 1px solid ${borderCol}; border-radius: 4px; background: ${bgCol}; color: ${textCol}; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 12px; transition: background 0.1s, transform 0.05s;">${k.toUpperCase()}</div>`;
         }).join('') + `</div>`
     ).join('');
 

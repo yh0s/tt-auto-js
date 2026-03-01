@@ -8,6 +8,11 @@ export class KeyboardPanel {
         this.container = null;
         this.vkKeyElements = new Map();
         this.cleanupDrag = null;
+
+        // ★追加: 苦手キーが更新されたらキーボードの見た目も再描画する
+        this.eventBus.on('ui:weakKeysUpdated', () => {
+            if (this.container) this.updateKeys();
+        });
     }
 
     create() {
@@ -18,8 +23,16 @@ export class KeyboardPanel {
         const initTop = Math.max(0, window.innerHeight - 250);
 
         this.container.style.cssText = getKeyboardStyle(initLeft, initTop);
-        this.container.innerHTML = getKeyboardHTML();
         document.body.appendChild(this.container);
+
+        this.updateKeys();
+    }
+
+    // ★追加: DOMの再描画を行うメソッド
+    updateKeys() {
+        if (this.cleanupDrag) this.cleanupDrag();
+
+        this.container.innerHTML = getKeyboardHTML(this.config.weakKeysList);
 
         this.vkKeyElements.clear();
         this.container.querySelectorAll('.tt-vk-key').forEach(el => {
@@ -41,10 +54,15 @@ export class KeyboardPanel {
             el.style.color = '#000';
             el.style.transform = 'scale(0.9)';
 
+            // ★変更: 戻るべき元の色を計算する
+            const isWeak = keyId !== 'space' && this.config.weakKeysList.includes(keyId);
+            const origBg = isWeak ? '#4a2a38' : '#333';
+            const origColor = isWeak ? '#ffb3d9' : '#fff';
+
             setTimeout(() => {
                 if (el) {
-                    el.style.background = '#333';
-                    el.style.color = '#fff';
+                    el.style.background = origBg;
+                    el.style.color = origColor;
                     el.style.transform = 'scale(1.0)';
                 }
             }, 100);
