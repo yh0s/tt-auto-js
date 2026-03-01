@@ -1,3 +1,6 @@
+import { QWERTY_KEYS, ADJACENT_KEYS, SYMBOL_MAP } from '../config/constants.js';
+import { setupDraggable } from '../utils/domUtils.js';
+
 // 自動化システム
 export class AutoTyper {
     constructor(config) {
@@ -34,7 +37,7 @@ export class AutoTyper {
     }
 
     async setPauseState(state) {
-        if (this.controller.youtubeController.player.getCurrentTime() === 0) return;
+        if (this.controller && this.controller.youtubeController && this.controller.youtubeController.player && this.controller.youtubeController.player.getCurrentTime() === 0) return;
 
         if (this.isCancelled || this.isPaused === state) return;
         this.isPaused = state;
@@ -96,7 +99,9 @@ export class AutoTyper {
             `;
         document.body.appendChild(this.execUiContainer);
 
-        this.setupDraggable(this.execUiContainer, this.execUiContainer.querySelector('#tt-drag-handle'));
+        // ★戻り値（解除関数）を cleanupCallbacks に追加
+        const cleanupDrag = setupDraggable(this.execUiContainer, this.execUiContainer.querySelector('#tt-drag-handle'));
+        this.cleanupCallbacks.push(cleanupDrag);
 
         const getEl = id => this.execUiContainer.querySelector(`#${id}`);
         getEl('tt-exec-step').addEventListener('change', e => {
@@ -168,7 +173,8 @@ export class AutoTyper {
             `;
         document.body.appendChild(this.debugUiContainer);
 
-        this.setupDraggable(this.debugUiContainer, this.debugUiContainer.querySelector('#tt-debug-drag'));
+        const cleanupDrag = setupDraggable(this.debugUiContainer, this.debugUiContainer.querySelector('#tt-debug-drag'));
+        this.cleanupCallbacks.push(cleanupDrag);
     }
 
     removeDebugUI() {
@@ -218,7 +224,8 @@ export class AutoTyper {
             this.vkKeyElements.set(el.getAttribute('data-key'), el);
         });
 
-        this.setupDraggable(this.keyboardUiContainer, this.keyboardUiContainer.querySelector('#tt-vk-drag-handle'));
+        const cleanupDrag = setupDraggable(this.keyboardUiContainer, this.keyboardUiContainer.querySelector('#tt-vk-drag-handle'));
+        this.cleanupCallbacks.push(cleanupDrag);
     }
 
     removeKeyboardUI() {
@@ -282,7 +289,8 @@ export class AutoTyper {
             `;
         document.body.appendChild(this.humanityUiContainer);
 
-        this.setupDraggable(this.humanityUiContainer, this.humanityUiContainer.querySelector('#tt-humanity-drag'));
+        const cleanupDrag = setupDraggable(this.humanityUiContainer, this.humanityUiContainer.querySelector('#tt-humanity-drag'));
+        this.cleanupCallbacks.push(cleanupDrag);
 
         const getEl = id => this.humanityUiContainer.querySelector(`#${id}`);
         const updateInfoDisplay = () => {
@@ -308,7 +316,6 @@ export class AutoTyper {
     async openWeakKeysModal() {
         if (document.getElementById('tt-wk-modal')) return;
 
-        // ★モーダル表示時に一時停止
         await this.setPauseState(true);
 
         const overlay = document.createElement('div');
@@ -622,7 +629,6 @@ export class AutoTyper {
         let code, keyCode, shiftKey = false;
         const upperKey = key.toUpperCase();
 
-        // 1. 特殊キーの個別処理
         if (key === "F4") {
             code = "F4"; keyCode = 115;
         } else if (key === "Escape") {
@@ -630,18 +636,15 @@ export class AutoTyper {
         } else if (key === " ") {
             code = "Space"; keyCode = 32;
         }
-        // 2. アルファベット入力 ([a-zA-Z])
         else if (/^[a-zA-Z]$/.test(key)) {
             code = "Key" + upperKey;
             keyCode = upperKey.charCodeAt(0);
             if (key === upperKey && key !== key.toLowerCase()) shiftKey = true;
         }
-        // 3. 数字入力 ([0-9])
         else if (/^[0-9]$/.test(key)) {
             code = "Digit" + key;
             keyCode = key.charCodeAt(0);
         }
-        // 4. 記号入力
         else {
             const data = SYMBOL_MAP[key];
             if (data) {
@@ -649,7 +652,6 @@ export class AutoTyper {
                 keyCode = data.k;
                 shiftKey = data.s || false;
             } else {
-                // マップにない記号へのフォールバック
                 code = "Key" + upperKey;
                 keyCode = upperKey.charCodeAt(0);
             }

@@ -1,6 +1,6 @@
-import { DEFAULT_CONFIG } from './config/constants';
-import { ConfigModal } from './ui/ConfigModal';
-import { AutoTyper } from './core/AutoTyper';
+import { DEFAULT_CONFIG } from './config/constants.js';
+import { ConfigModal } from './ui/ConfigModal.js';
+import { AutoTyper } from './core/AutoTyper.js';
 
 (async function () {
     if (!document.location.href.match(/typing-tube\.net\/play\/typing\/\d+/)) {

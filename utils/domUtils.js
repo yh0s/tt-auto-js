@@ -2,7 +2,7 @@
  * DOM操作関連のユーティリティ
  */
 
-export async function setupDraggable(modalElement, handleElement) {
+export function setupDraggable(modalElement, handleElement) {
     let isDragging = false;
     let offsetX = 0, offsetY = 0;
 
@@ -37,9 +37,10 @@ export async function setupDraggable(modalElement, handleElement) {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
 
-    this.cleanupCallbacks.push(() => {
+    // 呼び出し元でリスナーを解除できるように、クリーンアップ関数を返す
+    return () => {
         handleElement.removeEventListener('mousedown', onMouseDown);
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
-    });
+    };
 }
