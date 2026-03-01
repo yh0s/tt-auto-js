@@ -15,7 +15,37 @@ export class DebugPanel {
         this.container.style.cssText = getDebugStyle();
         this.container.innerHTML = getDebugHTML();
         document.body.appendChild(this.container);
+
         this.cleanupDrag = setupDraggable(this.container, this.container.querySelector('#tt-debug-drag'));
+
+        // ★追加: ボタンの制御ロジック
+        const exposeBtn = this.container.querySelector('#tt-debug-btn-expose');
+        if (exposeBtn) {
+            // パネルを再表示した際、既に露出済みならボタンを無効化しておく
+            if (window.ttDebug) {
+                this.setButtonExposed(exposeBtn);
+            } else {
+                exposeBtn.addEventListener('click', () => {
+                    if (exposeBtn.disabled) return;
+
+                    // main.jsに露出を依頼する
+                    this.eventBus.emit('debug:exposeVariables');
+
+                    // ボタンを無効状態に変更
+                    this.setButtonExposed(exposeBtn);
+                });
+            }
+        }
+    }
+
+    // ★追加: ボタンを「使用済み」の見た目に変更するヘルパー
+    setButtonExposed(btn) {
+        btn.disabled = true;
+        btn.textContent = 'Exposed! (Check F12 Console)';
+        btn.style.background = '#444';
+        btn.style.color = '#888';
+        btn.style.cursor = 'default';
+        btn.style.border = '1px solid #555';
     }
 
     remove() {

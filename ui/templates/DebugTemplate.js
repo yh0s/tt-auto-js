@@ -8,11 +8,15 @@ export const getDebugStyle = () => `
 export const getDebugHTML = () => `
     <div id="tt-debug-drag" style="font-size: 13px; font-weight: bold; margin-bottom: 10px; color: #ff9800; cursor: move; user-select: none; border-bottom: 1px solid #ff9800; padding-bottom: 4px; flex-shrink: 0;">🐛 Debug Console (Drag)</div>
     <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-shrink: 0;">
-        <div style="color: #aaa; margin-bottom: 4px;">[ Toggles ]</div>
-        <div style="color: #666; font-size: 9px; margin-left: 10px;">(今後追加予定のデバッグ機能が並びます)</div>
+        <div style="color: #aaa; margin-bottom: 6px;">[ Actions ]</div>
+        <button id="tt-debug-btn-expose" style="padding: 6px 8px; font-size: 11px; background: #ff9800; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; transition: background 0.2s;">
+            Expose to window.ttDebug
+        </button>
     </div>
     <div id="tt-debug-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-grow: 1; display: flex; flex-direction: column; min-height: 0; overflow-y: auto;">
         <div style="color: #aaa; margin-bottom: 4px; flex-shrink: 0;">[ Information ]</div>
-        <div id="tt-debug-info-none" style="color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">No debug features enabled.</div>
+        <div id="tt-debug-info-none" style="color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">
+            Open F12 Console after expose.
+        </div>
     </div>
 `;

@@ -13,12 +13,18 @@ import { EventEmitter } from './utils/EventEmitter.js';
         const modal = new ConfigModal(DEFAULT_CONFIG);
         const userConfig = await modal.promptUser();
 
-        // イベントバスの生成
         const eventBus = new EventEmitter();
-
-        // ロジックとUIの完全分離（イベントバスのみ共有）
         const typer = new AutoTyper(userConfig, eventBus);
         const uiManager = new UIManager(userConfig, eventBus);
+
+        // ★追加: デバッグUIからの変数露出リクエストを受信
+        eventBus.on('debug:exposeVariables', () => {
+            if (!window.ttDebug) {
+                window.ttDebug = { typer, uiManager, eventBus, config: userConfig };
+                console.log('%c[AutoTyper Debug]  "ttDebug" successfully exposed!', 'color: #ff9800; font-weight: bold; font-size: 14px;');
+                console.log(window.ttDebug);
+            }
+        });
 
         uiManager.initAllUI();
         await typer.run();
