@@ -74,6 +74,14 @@ export class HumanityPanel {
         getEl('tt-hum-wk-var').addEventListener('change', e => { let v = parseFloat(e.target.value); this.config.weakKeysVar = isNaN(v) ? 0 : Math.max(0, v); });
         getEl('tt-hum-panic-base').addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicDelayBase = isNaN(v) ? 0 : Math.max(0, v); });
         getEl('tt-hum-panic-var').addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicDelayVar = isNaN(v) ? 0 : Math.max(0, v); });
+
+        // ★追加: オーバーラン設定のイベントリスナー
+        const opEl = getEl('tt-hum-panic-or-prob');
+        if (opEl) opEl.addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicOverrunProb = isNaN(v) ? 0 : Math.max(0, Math.min(100, v)); });
+        const ominEl = getEl('tt-hum-panic-or-min');
+        if (ominEl) ominEl.addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicOverrunMin = isNaN(v) ? 0 : Math.max(0, v); });
+        const omaxEl = getEl('tt-hum-panic-or-max');
+        if (omaxEl) omaxEl.addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicOverrunMax = isNaN(v) ? 0 : Math.max(0, v); });
     }
 
     updateStatus(state) {

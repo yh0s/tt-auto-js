@@ -30,11 +30,19 @@ export const getHumanityHTML = (config) => `
                 <span>Weak: <span id="tt-hum-wk-list" style="color: #FFD700; word-break: break-all;">${config.weakKeysList.join(',').toUpperCase() || 'None'}</span></span>
                 <button id="tt-hum-btn-wk-edit" disabled style="padding: 2px 6px; font-size: 10px; background: #555; color: #888; border: none; border-radius: 3px; cursor: not-allowed;">Edit</button>
             </div>
-            <div style="display: flex; gap: 4px; align-items: center;">Base:x<input type="number" id="tt-hum-wk-base" value="${config.weakKeysBase}" step="0.1" min="1.0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> Var:±<input type="number" id="tt-hum-wk-var" value="${config.weakKeysVar}" step="0.1" min="0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"></div>
+            <div style="display: flex; gap: 4px; align-items: center;">Base:x<input type="number" id="tt-hum-wk-base" value="${config.weakKeysBase}" step="0.1" min="1.0" style="width: 35px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> Var:±<input type="number" id="tt-hum-wk-var" value="${config.weakKeysVar}" step="0.1" min="0" style="width: 35px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"></div>
         </div>
         <div id="tt-hum-info-panic" style="display: ${config.humanityFeatures.transPanic ? 'flex' : 'none'}; flex-direction: column; margin-top: 8px; border-top: 1px dashed #666; padding-top: 6px; flex-shrink: 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;"><span style="color: #FF6347;">⚠️ Transition Panic</span><span id="tt-hum-panic-status" style="font-size: 10px; font-weight: bold; color: #666;">Ready</span></div>
-            <div style="display: flex; gap: 4px; align-items: center;">Delay: <input type="number" id="tt-hum-panic-base" value="${config.panicDelayBase}" step="50" min="0" style="width: 45px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ms ±<input type="number" id="tt-hum-panic-var" value="${config.panicDelayVar}" step="50" min="0" style="width: 45px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ms</div>
+            <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+                Wait: <input type="number" id="tt-hum-panic-base" value="${config.panicDelayBase}" step="50" min="0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ms
+                ±<input type="number" id="tt-hum-panic-var" value="${config.panicDelayVar}" step="50" min="0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ms
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+                Overrun: <input type="number" id="tt-hum-panic-or-prob" value="${config.panicOverrunProb}" step="10" min="0" max="100" style="width: 35px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> %
+                ( <input type="number" id="tt-hum-panic-or-min" value="${config.panicOverrunMin}" step="1" min="0" style="width: 25px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> -
+                <input type="number" id="tt-hum-panic-or-max" value="${config.panicOverrunMax}" step="1" min="0" style="width: 25px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ch )
+            </div>
         </div>
         <div id="tt-hum-info-none" style="display: ${(config.humanityFeatures.concentration || config.humanityFeatures.weakKeys || config.humanityFeatures.transPanic) ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">No features enabled.</div>
     </div>

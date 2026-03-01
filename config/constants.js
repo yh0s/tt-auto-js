@@ -20,6 +20,10 @@ export const DEFAULT_CONFIG = {
     weakKeysVar: 0.2,
     panicDelayBase: 600,
     panicDelayVar: 200,
+    // ★追加: オーバーラン（打ち過ぎ）設定
+    panicOverrunProb: 70, // 発生確率(%)
+    panicOverrunMin: 1,   // 最小文字数
+    panicOverrunMax: 3,   // 最大文字数
     showKeyboard: false,
     debugMode: false,
     debugFeatures: {}

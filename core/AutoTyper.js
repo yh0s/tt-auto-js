@@ -144,7 +144,36 @@ export class AutoTyper {
                 }
                 if (this.isCancelled) break;
 
-                if ((this.controller.count - 1) > i) { this.isTransitionPanic = true; break; }
+                // ===============================================
+                // ★変更: 強制遷移の検知とオーバーラン（打ち過ぎ）処理
+                // ===============================================
+                if ((this.controller.count - 1) > i) {
+
+                    if (this.config.humanitySim && this.config.humanityFeatures.transPanic) {
+                        // 指定確率でオーバーランが発生するか判定
+                        if (Math.random() * 100 < this.config.panicOverrunProb) {
+                            // 何文字打ち続けるかを決定 (Min 〜 Max の範囲)
+                            const overrunCount = Math.floor(Math.random() * (this.config.panicOverrunMax - this.config.panicOverrunMin + 1)) + this.config.panicOverrunMin;
+                            // 実際に打てる残りの文字数と比較して少ない方を選ぶ
+                            const endIdx = Math.min(j + overrunCount, lineKeys.length);
+
+                            // 古い行の続きを、焦った速度（ペナルティ0.8）でミス扱いとして打ち続ける
+                            for (let k = j; k < endIdx; k++) {
+                                if (this.isCancelled || this.isPaused || this.isSuspended) break;
+                                const char = lineKeys[k];
+                                document.title = `${baseTitle} ${char} (Overrun!)`;
+
+                                // 第2引数 false(KPS除外)、第3引数 true(Miss視覚効果)
+                                await this.simulateKeydown(char, false, true);
+                                await delay(getRandomDelay(this.config, this.humanity.state, 0.8), () => this.isCancelled);
+                            }
+                        }
+                    }
+
+                    this.isTransitionPanic = true;
+                    break; // 古い行のループを抜け、次の行へ移る
+                }
+                // ===============================================
 
                 const char = lineKeys[j];
                 let currentMissRate = this.config.missRate;
