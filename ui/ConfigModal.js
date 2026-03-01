@@ -45,6 +45,8 @@ export class ConfigModal {
                 this.config.maxDelay = newMax;
                 this.config.missRate = isNaN(newMiss) ? 0 : Math.max(0, Math.min(100, newMiss));
                 this.config.autoSkip = getEl('tt-auto-skip').checked;
+                // ★追加: forceAutoSkip の保存
+                this.config.forceAutoSkip = getEl('tt-force-auto-skip').checked;
                 this.config.humanitySim = getEl('tt-humanity-sim').checked;
                 this.config.showKeyboard = getEl('tt-show-keyboard').checked;
                 this.config.debugMode = getEl('tt-debug-mode').checked;

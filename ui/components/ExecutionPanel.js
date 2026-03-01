@@ -32,7 +32,10 @@ export class ExecutionPanel {
         getEl('tt-exec-min').addEventListener('change', e => { const val = parseInt(e.target.value, 10); if (val > 0) this.config.minDelay = val; });
         getEl('tt-exec-max').addEventListener('change', e => { const val = parseInt(e.target.value, 10); if (val > 0) this.config.maxDelay = val; });
         getEl('tt-exec-miss').addEventListener('change', e => { this.config.missRate = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)); });
+
         getEl('tt-exec-autoskip').addEventListener('change', e => this.config.autoSkip = e.target.checked);
+        // ★追加: Force Auto Skip のイベント
+        getEl('tt-exec-force-autoskip').addEventListener('change', e => this.config.forceAutoSkip = e.target.checked);
 
         getEl('tt-exec-humanity').addEventListener('change', e => {
             this.config.humanitySim = e.target.checked;
@@ -47,7 +50,6 @@ export class ExecutionPanel {
             this.eventBus.emit('ui:toggleDebug', e.target.checked);
         });
 
-        // ★追加: Suspendボタンのクリックイベント
         getEl('tt-exec-suspend').onclick = () => this.eventBus.emit('ui:action_suspendToggle');
 
         getEl('tt-exec-pause').onclick = () => this.eventBus.emit('ui:action_pauseToggle');
@@ -67,12 +69,10 @@ export class ExecutionPanel {
         }
     }
 
-    // ★追加: Suspend状態のUI更新
     updateSuspendUI(isSuspended) {
         if (!this.container) return;
         const suspendBtn = this.container.querySelector('#tt-exec-suspend');
         if (suspendBtn) {
-            // オレンジ色の警告色で一時停止中であることを分かりやすく表現
             suspendBtn.textContent = isSuspended ? "Auto: OFF" : "Auto: ON";
             suspendBtn.style.background = isSuspended ? "#fd7e14" : "#17a2b8";
         }

@@ -20,6 +20,7 @@ export const getExecutionHTML = (config) => {
         <div style="display: flex; gap: 4px; margin-bottom: 8px; flex-shrink: 0; font-size: 11px; align-items: center; flex-wrap: wrap;">
             Miss(%):<input type="number" id="tt-exec-miss" value="${config.missRate}" min="0" max="100" step="1" style="${inputStyle}">
             <label style="cursor: pointer; display: flex; align-items: center; margin-left: auto; background: #333; padding: 2px 4px; border-radius: 3px; border: 1px solid #555;"><input type="checkbox" id="tt-exec-autoskip" ${config.autoSkip ? 'checked' : ''} style="margin: 0 4px 0 0;"> Skip</label>
+            <label style="cursor: pointer; display: flex; align-items: center; background: #422; padding: 2px 4px; border-radius: 3px; border: 1px solid #744; color: #ff8888;"><input type="checkbox" id="tt-exec-force-autoskip" ${config.forceAutoSkip ? 'checked' : ''} style="margin: 0 4px 0 0;"> Force</label>
         </div>
         <div style="margin-bottom: 8px; flex-shrink: 0; font-size: 11px; border-top: 1px solid #444; padding-top: 6px; display: flex; flex-direction: column; gap: 4px;">
             <label style="cursor: pointer; display: flex; align-items: center; color: #d63384; font-weight: bold;"><input type="checkbox" id="tt-exec-humanity" ${config.humanitySim ? 'checked' : ''} style="margin-right: 6px;"> Humanity Simulation</label>

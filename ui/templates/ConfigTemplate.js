@@ -22,6 +22,8 @@ export const getConfigHTML = (config) => `
         <div style="font-size: 12px; margin-bottom: 10px; color: #666; text-align: right;">Est. KPS: <span id="tt-est-kps">0.00 - 0.00</span> (Avg: <span id="tt-avg-kps">0.00</span>)</div>
         <div class="tt-auto-form-group"><label>Miss Rate (%)</label><input type="number" id="tt-miss-rate" value="${config.missRate}" min="0" max="100"></div>
         <div class="tt-auto-form-group checkbox-group"><label><input type="checkbox" id="tt-auto-skip" ${config.autoSkip ? 'checked' : ''}>Auto Skip (ON / OFF)</label></div>
+        <div class="tt-auto-form-group checkbox-group"><label style="color: #FF4500;"><input type="checkbox" id="tt-force-auto-skip" ${config.forceAutoSkip ? 'checked' : ''}>Force Auto Skip</label></div>
+
         <div class="tt-auto-form-group checkbox-group" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
             <label style="color: #d63384; font-weight: bold;"><input type="checkbox" id="tt-humanity-sim" ${config.humanitySim ? 'checked' : ''}>Humanity Simulation</label>
         </div>

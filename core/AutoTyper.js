@@ -133,11 +133,22 @@ export class AutoTyper {
     }
 
     // ===============================================
-    // ★追加: 自動スキップを実行するかどうかの判断ロジック
+    // 通常の自動スキップ実行判断ロジック
     // ===============================================
     shouldExecuteAutoSkip() {
         const lyricsArray = controller.lyricsData.lyricsArray;
         if ((lyricsArray[controller.count][0] - controller.headTime) / controller.speed > 3 && (controller.completed || 0 === controller.nextChar.length)) {
+            return true;
+        }
+        return false;
+    }
+
+    // ===============================================
+    // ★追加: 強制自動スキップ実行判断ロジック
+    // ===============================================
+    shouldExecuteForceAutoSkip() {
+        const lyricsArray = controller.lyricsData.lyricsArray;
+        if ((lyricsArray[controller.count][0] - controller.headTime) > 0 && (controller.completed || 0 === controller.nextChar.length)) {
             return true;
         }
         return false;
@@ -231,11 +242,16 @@ export class AutoTyper {
             }
 
             // ===============================================
-            // ★変更: スキップ実行前に shouldExecuteAutoSkip() を評価する
+            // ★変更: スキップ判定（Force優先、次に通常のSkip判定）
             // ===============================================
-            if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
-                if (this.shouldExecuteAutoSkip()) {
+            if (this.config.forceAutoSkip && !this.isCancelled) {
+                if (this.shouldExecuteForceAutoSkip()) {
                     await this.simulateKeydown(" ", false, false);
+                }
+            } else if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
+                if (this.shouldExecuteAutoSkip()) {
+                    const youtubeController = this.controller.youtubeController;
+                    youtubeController && (this.controller._lastGameYtAction = Date.now(), youtubeController.seekTo(parseFloat(t[this.controller.count][0]) - 0.1, true));
                 }
             }
 

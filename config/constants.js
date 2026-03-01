@@ -8,6 +8,7 @@ export const DEFAULT_CONFIG = {
     startDelay: 1000,
     checkInterval: 100,
     autoSkip: true,
+    forceAutoSkip: false, // ★追加: 強制自動スキップ
     missRate: 0,
     humanitySim: false,
     humanityFeatures: {
