@@ -110,9 +110,29 @@ export class AutoTyper {
         }
     }
 
+    // ★変更: 文字単体ではなく、{ char, isComboNext } のオブジェクト配列を返す
     generateKeysList() {
         if (!Array.isArray(this.romajiData)) return [];
-        return this.romajiData.map(line => Array.isArray(line) ? line.join("").split("") : String(line).split(""));
+        return this.romajiData.map(line => {
+            let keys = [];
+            if (Array.isArray(line)) {
+                // TypingTubeのルビ単位配列（例: ["ka", "n", "ji"]）を処理
+                line.forEach(chunk => {
+                    const chars = String(chunk).split("");
+                    chars.forEach((c, idx) => {
+                        keys.push({
+                            char: c,
+                            isComboNext: idx > 0 // 2文字目以降は高速コンボ
+                        });
+                    });
+                });
+            } else {
+                // 文字列の場合はフォールバック
+                const chars = String(line).split("");
+                chars.forEach(c => keys.push({ char: c, isComboNext: false }));
+            }
+            return keys;
+        });
     }
 
     async typeKeys(keysList) {
@@ -144,38 +164,34 @@ export class AutoTyper {
                 }
                 if (this.isCancelled) break;
 
-                // ===============================================
-                // ★変更: 強制遷移の検知とオーバーラン（打ち過ぎ）処理
-                // ===============================================
+                // 強制遷移時のオーバーラン
                 if ((this.controller.count - 1) > i) {
-
                     if (this.config.humanitySim && this.config.humanityFeatures.transPanic) {
-                        // 指定確率でオーバーランが発生するか判定
                         if (Math.random() * 100 < this.config.panicOverrunProb) {
-                            // 何文字打ち続けるかを決定 (Min 〜 Max の範囲)
                             const overrunCount = Math.floor(Math.random() * (this.config.panicOverrunMax - this.config.panicOverrunMin + 1)) + this.config.panicOverrunMin;
-                            // 実際に打てる残りの文字数と比較して少ない方を選ぶ
                             const endIdx = Math.min(j + overrunCount, lineKeys.length);
-
-                            // 古い行の続きを、焦った速度（ペナルティ0.8）でミス扱いとして打ち続ける
                             for (let k = j; k < endIdx; k++) {
                                 if (this.isCancelled || this.isPaused || this.isSuspended) break;
-                                const char = lineKeys[k];
-                                document.title = `${baseTitle} ${char} (Overrun!)`;
 
-                                // 第2引数 false(KPS除外)、第3引数 true(Miss視覚効果)
+                                const charObj = lineKeys[k];
+                                const char = charObj.char;
+                                const isCombo = charObj.isComboNext && this.config.humanityFeatures.romajiCombo;
+
+                                document.title = `${baseTitle} ${char} (Overrun!)`;
                                 await this.simulateKeydown(char, false, true);
-                                await delay(getRandomDelay(this.config, this.humanity.state, 0.8), () => this.isCancelled);
+                                // オーバーラン時の焦り(0.8倍)とコンボ判定を組み合わせて遅延
+                                await delay(getRandomDelay(this.config, this.humanity.state, 0.8, isCombo), () => this.isCancelled);
                             }
                         }
                     }
-
-                    this.isTransitionPanic = true;
-                    break; // 古い行のループを抜け、次の行へ移る
+                    this.isTransitionPanic = true; break;
                 }
-                // ===============================================
 
-                const char = lineKeys[j];
+                // ★変更: オブジェクトから文字とコンボフラグを取り出す
+                const charObj = lineKeys[j];
+                const char = charObj.char;
+                const isCombo = charObj.isComboNext && this.config.humanitySim && this.config.humanityFeatures.romajiCombo;
+
                 let currentMissRate = this.config.missRate;
                 let weakPenalty = 1.0;
 
@@ -185,19 +201,24 @@ export class AutoTyper {
                     currentMissRate *= weakPenalty;
                 }
 
+                // ミスタイプ発生
                 if (currentMissRate > 0 && (Math.random() * 100 < currentMissRate)) {
                     const wrongChar = getRandomWrongChar(char);
                     document.title = `${baseTitle} ${wrongChar} (Miss!)`;
 
                     await this.simulateKeydown(wrongChar, false, true);
-                    await delay(getRandomDelay(this.config, this.humanity.state, weakPenalty), () => this.isCancelled);
+                    // ミスするとリズムが崩れるため、コンボは無効(false)として遅延を発生させる
+                    await delay(getRandomDelay(this.config, this.humanity.state, weakPenalty, false), () => this.isCancelled);
                     j--;
                     continue;
                 }
 
+                // 正常入力
                 document.title = `${baseTitle} ${char}`;
                 await this.simulateKeydown(char, true, false);
-                await delay(getRandomDelay(this.config, this.humanity.state, weakPenalty), () => this.isCancelled);
+
+                // ★変更: isCombo を引数に渡して遅延を決定する
+                await delay(getRandomDelay(this.config, this.humanity.state, weakPenalty, isCombo), () => this.isCancelled);
             }
 
             this.isTypingLine = false;
@@ -240,16 +261,14 @@ export class AutoTyper {
             await delay(this.config.startDelay, () => this.isCancelled);
 
             if (!this.isCancelled) {
-                // ★追加: 再生開始確認と待機が終了した直後にイベントを送信
                 this.eventBus.emit('typer:gameStarted');
-
                 const keysList = this.generateKeysList();
                 await this.typeKeys(keysList);
             }
 
             if (this.isCancelled) {
                 if (!this.isPaused) await this.simulateKeydown("Escape", false, false);
-                while (this.controller.youtubeController.player.getPlayerState() == 1) { // 1: 再生中, 2: 一時停止
+                while (this.controller.youtubeController.player.getPlayerState() == 1) {
                     await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
                 }
                 alert("AutoTyperを停止しました。");

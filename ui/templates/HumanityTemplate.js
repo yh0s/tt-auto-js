@@ -10,7 +10,15 @@ export const getHumanityHTML = (config) => `
     <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-shrink: 0;">
         <label style="cursor: pointer; display: flex; align-items: center; margin-bottom: 4px;"><input type="checkbox" id="tt-hum-toggle-conc" ${config.humanityFeatures.concentration ? 'checked' : ''} style="margin-right: 6px;"> Concentration (集中力)</label>
         <label style="cursor: pointer; display: flex; align-items: center; margin-bottom: 4px;"><input type="checkbox" id="tt-hum-toggle-weak" ${config.humanityFeatures.weakKeys ? 'checked' : ''} style="margin-right: 6px;"> Weak Keys (不得意キー)</label>
-        <label style="cursor: pointer; display: flex; align-items: center;"><input type="checkbox" id="tt-hum-toggle-panic" ${config.humanityFeatures.transPanic ? 'checked' : ''} style="margin-right: 6px;"> Trans. Panic (強制遷移対応)</label>
+        <label style="cursor: pointer; display: flex; align-items: center; margin-bottom: 4px;"><input type="checkbox" id="tt-hum-toggle-panic" ${config.humanityFeatures.transPanic ? 'checked' : ''} style="margin-right: 6px;"> Trans. Panic (強制遷移対応)</label>
+
+        <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 4px;">
+            <label style="cursor: pointer; display: flex; align-items: center;"><input type="checkbox" id="tt-hum-toggle-combo" ${config.humanityFeatures.romajiCombo ? 'checked' : ''} style="margin-right: 6px;"> Romaji Combo</label>
+            <div style="margin-left: 10px;">
+                Delay: <input type="number" id="tt-hum-combo-min" value="${config.romajiComboMin}" step="10" min="0" style="width: 35px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> -
+                <input type="number" id="tt-hum-combo-max" value="${config.romajiComboMax}" step="10" min="0" style="width: 35px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ms
+            </div>
+        </div>
     </div>
     <div id="tt-hum-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
         <div id="tt-hum-overall-status" style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #666; flex-shrink: 0;">
@@ -44,6 +52,6 @@ export const getHumanityHTML = (config) => `
                 <input type="number" id="tt-hum-panic-or-max" value="${config.panicOverrunMax}" step="1" min="0" style="width: 25px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ch )
             </div>
         </div>
-        <div id="tt-hum-info-none" style="display: ${(config.humanityFeatures.concentration || config.humanityFeatures.weakKeys || config.humanityFeatures.transPanic) ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">No features enabled.</div>
+        <div id="tt-hum-info-none" style="display: ${(config.humanityFeatures.concentration || config.humanityFeatures.weakKeys || config.humanityFeatures.transPanic || config.humanityFeatures.romajiCombo) ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">No features enabled.</div>
     </div>
 `;

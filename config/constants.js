@@ -13,17 +13,20 @@ export const DEFAULT_CONFIG = {
     humanityFeatures: {
         concentration: true,
         weakKeys: false,
-        transPanic: false
+        transPanic: false,
+        romajiCombo: true // ★追加: ローマ字塊入力シミュレーション
     },
     weakKeysList: [],
     weakKeysBase: 1.5,
     weakKeysVar: 0.2,
     panicDelayBase: 600,
     panicDelayVar: 200,
-    // ★追加: オーバーラン（打ち過ぎ）設定
     panicOverrunProb: 70, // 発生確率(%)
     panicOverrunMin: 1,   // 最小文字数
     panicOverrunMax: 3,   // 最大文字数
+    // ★追加: コンボ時の遅延（塊の中の文字の打鍵間隔）の設定値
+    romajiComboMin: 30,
+    romajiComboMax: 80,
     showKeyboard: false,
     debugMode: false,
     debugFeatures: {}

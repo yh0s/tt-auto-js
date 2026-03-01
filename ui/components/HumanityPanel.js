@@ -7,8 +7,6 @@ export class HumanityPanel {
         this.eventBus = eventBus;
         this.container = null;
         this.cleanupDrag = null;
-
-        // ★追加: ゲームが開始済みであるかを記憶するフラグ
         this.isGameStarted = false;
 
         this.eventBus.on('ui:weakKeysUpdated', (keys) => {
@@ -18,14 +16,12 @@ export class HumanityPanel {
             }
         });
 
-        // ★修正: ゲーム開始イベントを受信したら記憶し、ボタンを有効化する
         this.eventBus.on('typer:gameStarted', () => {
             this.isGameStarted = true;
             this.enableEditButton();
         });
     }
 
-    // ★追加: Editボタンを有効化する共通ロジック
     enableEditButton() {
         if (this.container) {
             const editBtn = this.container.querySelector('#tt-hum-btn-wk-edit');
@@ -48,7 +44,6 @@ export class HumanityPanel {
         this.cleanupDrag = setupDraggable(this.container, this.container.querySelector('#tt-humanity-drag'));
         this.bindEvents();
 
-        // ★追加: モーダル生成時に、すでにゲームが開始していれば即座にボタンを有効化する
         if (this.isGameStarted) {
             this.enableEditButton();
         }
@@ -57,7 +52,7 @@ export class HumanityPanel {
     bindEvents() {
         const getEl = id => this.container.querySelector(`#${id}`);
         const updateInfoDisplay = () => {
-            const anyE = this.config.humanityFeatures.concentration || this.config.humanityFeatures.weakKeys || this.config.humanityFeatures.transPanic;
+            const anyE = this.config.humanityFeatures.concentration || this.config.humanityFeatures.weakKeys || this.config.humanityFeatures.transPanic || this.config.humanityFeatures.romajiCombo;
             getEl('tt-hum-info-none').style.display = anyE ? 'none' : 'block';
             getEl('tt-hum-info-conc').style.display = this.config.humanityFeatures.concentration ? 'flex' : 'none';
             getEl('tt-hum-info-weak').style.display = this.config.humanityFeatures.weakKeys ? 'flex' : 'none';
@@ -67,15 +62,23 @@ export class HumanityPanel {
         getEl('tt-hum-toggle-conc').addEventListener('change', e => { this.config.humanityFeatures.concentration = e.target.checked; updateInfoDisplay(); });
         getEl('tt-hum-toggle-weak').addEventListener('change', e => { this.config.humanityFeatures.weakKeys = e.target.checked; updateInfoDisplay(); });
         getEl('tt-hum-toggle-panic').addEventListener('change', e => { this.config.humanityFeatures.transPanic = e.target.checked; updateInfoDisplay(); });
+        getEl('tt-hum-toggle-combo').addEventListener('change', e => { this.config.humanityFeatures.romajiCombo = e.target.checked; updateInfoDisplay(); });
 
         getEl('tt-hum-btn-wk-edit').addEventListener('click', () => this.eventBus.emit('ui:openWeakKeys'));
 
+        // ★追加: Combo Delayの入力イベント
+        const cminEl = getEl('tt-hum-combo-min');
+        if (cminEl) cminEl.addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.romajiComboMin = isNaN(v) ? 0 : Math.max(0, v); });
+
+        const cmaxEl = getEl('tt-hum-combo-max');
+        if (cmaxEl) cmaxEl.addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.romajiComboMax = isNaN(v) ? 0 : Math.max(0, v); });
+
         getEl('tt-hum-wk-base').addEventListener('change', e => { let v = parseFloat(e.target.value); this.config.weakKeysBase = isNaN(v) ? 1.0 : Math.max(1.0, v); });
         getEl('tt-hum-wk-var').addEventListener('change', e => { let v = parseFloat(e.target.value); this.config.weakKeysVar = isNaN(v) ? 0 : Math.max(0, v); });
+
         getEl('tt-hum-panic-base').addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicDelayBase = isNaN(v) ? 0 : Math.max(0, v); });
         getEl('tt-hum-panic-var').addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicDelayVar = isNaN(v) ? 0 : Math.max(0, v); });
 
-        // ★追加: オーバーラン設定のイベントリスナー
         const opEl = getEl('tt-hum-panic-or-prob');
         if (opEl) opEl.addEventListener('change', e => { let v = parseInt(e.target.value, 10); this.config.panicOverrunProb = isNaN(v) ? 0 : Math.max(0, Math.min(100, v)); });
         const ominEl = getEl('tt-hum-panic-or-min');

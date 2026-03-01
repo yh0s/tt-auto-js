@@ -16,10 +16,18 @@ export async function delay(ms, isCancelledFn) {
     });
 }
 
-export function getRandomDelay(config, humanityState, extraPenalty = 1.0) {
-    const min = Math.min(config.minDelay, config.maxDelay);
-    const max = Math.max(config.minDelay, config.maxDelay);
-    let baseDelay = Math.floor(Math.random() * (max - min)) + min;
+// ★変更: コンボ時は config 内のパラメータを利用する
+export function getRandomDelay(config, humanityState, extraPenalty = 1.0, isCombo = false) {
+    let min, max;
+    if (isCombo) {
+        min = Math.min(config.romajiComboMin, config.romajiComboMax);
+        max = Math.max(config.romajiComboMin, config.romajiComboMax);
+    } else {
+        min = Math.min(config.minDelay, config.maxDelay);
+        max = Math.max(config.minDelay, config.maxDelay);
+    }
+
+    let baseDelay = Math.floor(Math.random() * (max - min + 1)) + min;
 
     if (config.humanitySim) {
         baseDelay = Math.floor(baseDelay * humanityState.delayMult);
