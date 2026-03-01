@@ -251,7 +251,8 @@ export class AutoTyper {
             } else if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
                 if (this.shouldExecuteAutoSkip()) {
                     const youtubeController = this.controller.youtubeController;
-                    youtubeController && (this.controller._lastGameYtAction = Date.now(), youtubeController.seekTo(parseFloat(t[this.controller.count][0]) - 0.1, true));
+                    const lyricsArray = this.controller.lyricsData.lyricsArray;
+                    youtubeController && (this.controller._lastGameYtAction = Date.now(), youtubeController.seekTo(parseFloat(lyricsArray[this.controller.count][0]) - 0.1, true));
                 }
             }
 
