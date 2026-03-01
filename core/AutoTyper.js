@@ -136,8 +136,8 @@ export class AutoTyper {
     // 通常の自動スキップ実行判断ロジック
     // ===============================================
     shouldExecuteAutoSkip() {
-        const lyricsArray = controller.lyricsData.lyricsArray;
-        if ((lyricsArray[controller.count][0] - controller.headTime) / controller.speed > 3 && (controller.completed || 0 === controller.nextChar.length)) {
+        const lyricsArray = this.controller.lyricsData.lyricsArray;
+        if ((lyricsArray[this.controller.count][0] - this.controller.headTime) / this.controller.speed > 3 && (this.controller.completed || 0 === this.controller.nextChar.length)) {
             return true;
         }
         return false;
@@ -147,8 +147,8 @@ export class AutoTyper {
     // ★追加: 強制自動スキップ実行判断ロジック
     // ===============================================
     shouldExecuteForceAutoSkip() {
-        const lyricsArray = controller.lyricsData.lyricsArray;
-        if ((lyricsArray[controller.count][0] - controller.headTime) > 0 && (controller.completed || 0 === controller.nextChar.length)) {
+        const lyricsArray = this.controller.lyricsData.lyricsArray;
+        if ((lyricsArray[this.controller.count][0] - this.controller.headTime) > 0 && (this.controller.completed || 0 === this.controller.nextChar.length)) {
             return true;
         }
         return false;
