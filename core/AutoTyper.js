@@ -220,7 +220,10 @@ export class AutoTyper {
 
             if (this.isCancelled) {
                 if (!this.isPaused) await this.simulateKeydown("Escape", false, false);
-                alert("AutoTyperをキャンセルしました。");
+                while (this.controller.youtubeController.player.getPlayerState() == 1) { // 1: 再生中, 2: 一時停止
+                    await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
+                }
+                alert("AutoTyperを停止しました。");
             } else {
                 alert("tt-auto.js finished!");
             }
