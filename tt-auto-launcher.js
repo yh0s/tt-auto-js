@@ -1,5 +1,5 @@
 (function () {
-    var rawUrl = 'https://cdn.jsdelivr.net/gh/yh0s/tt-auto-js@main/tt-auto.js' + '?t=' + Date.now();
+    var rawUrl = 'https://cdn.jsdelivr.net/gh/yh0s/tt-auto-js@main/main.js' + '?t=' + Date.now();
     var s = document.createElement('script');
     s.type = 'module';
 
