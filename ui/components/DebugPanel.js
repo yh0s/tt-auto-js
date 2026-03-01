@@ -18,23 +18,25 @@ export class DebugPanel {
 
         this.cleanupDrag = setupDraggable(this.container, this.container.querySelector('#tt-debug-drag'));
 
-        // ★追加: ボタンの制御ロジック
         const exposeBtn = this.container.querySelector('#tt-debug-btn-expose');
         if (exposeBtn) {
-            // パネルを再表示した際、既に露出済みならボタンを無効化しておく
             if (window.ttDebug) {
                 this.setButtonExposed(exposeBtn);
             } else {
                 exposeBtn.addEventListener('click', () => {
                     if (exposeBtn.disabled) return;
-
-                    // main.jsに露出を依頼する
                     this.eventBus.emit('debug:exposeVariables');
-
-                    // ボタンを無効状態に変更
                     this.setButtonExposed(exposeBtn);
                 });
             }
+        }
+
+        // ★追加: デバッグキーボード起動イベント
+        const kbBtn = this.container.querySelector('#tt-debug-btn-keyboard');
+        if (kbBtn) {
+            kbBtn.addEventListener('click', () => {
+                this.eventBus.emit('debug:openKeyboard');
+            });
         }
     }
 

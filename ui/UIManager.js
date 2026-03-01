@@ -3,6 +3,7 @@ import { DebugPanel } from './components/DebugPanel.js';
 import { KeyboardPanel } from './components/KeyboardPanel.js';
 import { HumanityPanel } from './components/HumanityPanel.js';
 import { WeakKeysModal } from './components/WeakKeysModal.js';
+import { DebugKeyboardPanel } from './components/DebugKeyboardPanel.js'; // ★追加
 
 export class UIManager {
     constructor(config, eventBus) {
@@ -14,6 +15,7 @@ export class UIManager {
         this.keyboardPanel = new KeyboardPanel(config, eventBus);
         this.humanityPanel = new HumanityPanel(config, eventBus);
         this.weakKeysModal = new WeakKeysModal(config, eventBus);
+        this.debugKeyboardPanel = new DebugKeyboardPanel(config, eventBus); // ★追加
 
         // --- AutoTyperからのイベントをパネルにルーティング ---
         this.eventBus.on('typer:pauseChanged', (isPaused) => this.executionPanel.updatePauseUI(isPaused));
@@ -30,6 +32,9 @@ export class UIManager {
         this.eventBus.on('ui:toggleKeyboard', (show) => show ? this.keyboardPanel.create() : this.keyboardPanel.remove());
         this.eventBus.on('ui:toggleDebug', (show) => show ? this.debugPanel.create() : this.debugPanel.remove());
         this.eventBus.on('ui:openWeakKeys', () => this.weakKeysModal.open());
+
+        // ★追加: デバッグキーボードのルーティング
+        this.eventBus.on('debug:openKeyboard', () => this.debugKeyboardPanel.create());
     }
 
     initAllUI() {
@@ -45,5 +50,6 @@ export class UIManager {
         this.keyboardPanel.remove();
         this.debugPanel.remove();
         this.weakKeysModal.remove();
+        this.debugKeyboardPanel.remove(); // ★追加
     }
 }
