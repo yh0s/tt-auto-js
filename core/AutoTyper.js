@@ -13,7 +13,7 @@ export class AutoTyper {
 
         this.isCancelled = false;
         this.isPaused = false;
-        this.isSuspended = false; // 自動入力のみの一時停止フラグ
+        this.isSuspended = false;
         this.isTypingLine = false;
         this.isTransitionPanic = false;
         this.tickerInterval = null;
@@ -33,10 +33,7 @@ export class AutoTyper {
             this.simulateKeydown(key, false, false);
         });
 
-        // ★追加: UIからのサスペンドトグル操作
         this.eventBus.on('ui:action_suspendToggle', () => this.setSuspendState(!this.isSuspended));
-
-        // ★変更: デバッグキーボードからのサスペンド指示も共通メソッドを通す
         this.eventBus.on('debug:suspendAutoTyping', (state) => this.setSuspendState(state));
     }
 
@@ -49,7 +46,6 @@ export class AutoTyper {
         await this.simulateKeydown("Escape", false, false);
     }
 
-    // ★追加: サスペンド状態をセットしUIに通知するメソッド
     setSuspendState(state) {
         if (this.isCancelled || this.isSuspended === state) return;
         this.isSuspended = state;
@@ -215,6 +211,9 @@ export class AutoTyper {
             await delay(this.config.startDelay, () => this.isCancelled);
 
             if (!this.isCancelled) {
+                // ★追加: 再生開始確認と待機が終了した直後にイベントを送信
+                this.eventBus.emit('typer:gameStarted');
+
                 const keysList = this.generateKeysList();
                 await this.typeKeys(keysList);
             }

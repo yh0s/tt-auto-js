@@ -14,6 +14,19 @@ export class HumanityPanel {
                 if (listEl) listEl.textContent = keys.join(',').toUpperCase() || 'None';
             }
         });
+
+        // ★追加: ゲーム開始イベントを受信してボタンを有効化する
+        this.eventBus.on('typer:gameStarted', () => {
+            if (this.container) {
+                const editBtn = this.container.querySelector('#tt-hum-btn-wk-edit');
+                if (editBtn) {
+                    editBtn.disabled = false;
+                    editBtn.style.background = '#d63384';
+                    editBtn.style.color = 'white';
+                    editBtn.style.cursor = 'pointer';
+                }
+            }
+        });
     }
 
     create() {
