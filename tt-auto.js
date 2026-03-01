@@ -1,5 +1,5 @@
 /**
- * タイピングゲーム自動化スクリプト (人間性シミュレート + 強制遷移パニック対応版)
+ * タイピングゲーム自動化スクリプト (人間性シミュレート + 強制遷移パニック + デバッグ基盤導入版)
  * [Refactored Version]
  */
 (async function () {
@@ -21,7 +21,9 @@
         weakKeysVar: 0.2,
         panicDelayBase: 600, // ★追加: 遷移時の反応遅延(ms)の基準値
         panicDelayVar: 200,  // ★追加: 遷移時の反応遅延(ms)のランダム変動幅
-        showKeyboard: false
+        showKeyboard: false,
+        debugMode: false,    // ★追加: デバッグモード
+        debugFeatures: {}    // ★追加: デバッグ機能の詳細設定用
     };
 
     // --- 定数データ ---
@@ -151,6 +153,9 @@
                         <div class="tt-auto-form-group checkbox-group">
                             <label style="color: #00bcd4; font-weight: bold;"><input type="checkbox" id="tt-show-keyboard" ${this.config.showKeyboard ? 'checked' : ''}>Show Virtual Keyboard</label>
                         </div>
+                        <div class="tt-auto-form-group checkbox-group" style="border-top: 1px solid #eee; padding-top: 10px;">
+                            <label style="color: #ff9800; font-weight: bold;"><input type="checkbox" id="tt-debug-mode" ${this.config.debugMode ? 'checked' : ''}>Debug Mode (dev)</label>
+                        </div>
                         <div class="tt-auto-actions">
                             <button class="tt-auto-btn cancel" id="tt-cancel-btn">Cancel</button>
                             <button class="tt-auto-btn" id="tt-start-btn">Start</button>
@@ -190,6 +195,7 @@
                     this.config.autoSkip = getEl('tt-auto-skip').checked;
                     this.config.humanitySim = getEl('tt-humanity-sim').checked;
                     this.config.showKeyboard = getEl('tt-show-keyboard').checked;
+                    this.config.debugMode = getEl('tt-debug-mode').checked; // ★追加
 
                     cleanup();
                     resolve(this.config);
@@ -213,8 +219,6 @@
             this.isCancelled = false;
             this.isPaused = false;
             this.isTypingLine = false;
-
-            // ★追加: 強制遷移によるパニック状態のフラグ
             this.isTransitionPanic = false;
 
             this.lastKeyTime = 0;
@@ -226,6 +230,8 @@
             this.execUiContainer = null;
             this.humanityUiContainer = null;
             this.keyboardUiContainer = null;
+            this.debugUiContainer = null; // ★追加: デバッグモーダル用
+
             this.vkKeyElements = new Map();
             this.canvasCtx = null;
             this.graphInterval = null;
@@ -305,8 +311,8 @@
         createExecutionUI() {
             this.execUiContainer = document.createElement('div');
             this.execUiContainer.style.cssText = `
-                position: fixed; top: 20px; right: 20px; width: 310px; height: 300px;
-                min-width: 280px; min-height: 270px;
+                position: fixed; top: 20px; right: 20px; width: 310px; height: 320px;
+                min-width: 280px; min-height: 290px;
                 background: rgba(20, 20, 20, 0.85); color: #fff; padding: 10px; border-radius: 8px; z-index: 99999;
                 font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.5); backdrop-filter: blur(4px);
                 display: flex; flex-direction: column; resize: both; overflow: hidden;
@@ -335,6 +341,9 @@
                     </label>
                     <label style="cursor: pointer; display: flex; align-items: center; color: #00bcd4; font-weight: bold;">
                         <input type="checkbox" id="tt-exec-keyboard" ${this.config.showKeyboard ? 'checked' : ''} style="margin-right: 6px;"> Virtual Keyboard
+                    </label>
+                    <label style="cursor: pointer; display: flex; align-items: center; color: #ff9800; font-weight: bold;">
+                        <input type="checkbox" id="tt-exec-debug" ${this.config.debugMode ? 'checked' : ''} style="margin-right: 6px;"> Debug Mode (dev)
                     </label>
                 </div>
 
@@ -368,14 +377,22 @@
                 this.config.showKeyboard ? this.createKeyboardUI() : this.removeKeyboardUI();
             });
 
-            getEl('tt-exec-pause').onclick = async () => {
+            // ★追加: デバッグUIイベント
+            getEl('tt-exec-debug').addEventListener('change', e => {
+                this.config.debugMode = e.target.checked;
+                this.config.debugMode ? this.createDebugUI() : this.removeDebugUI();
+            });
+
+            const pauseBtn = getEl('tt-exec-pause');
+            pauseBtn.onclick = async () => {
                 await this.setPauseState(!this.isPaused);
             };
 
-            getEl('tt-exec-cancel').onclick = () => {
+            const cancelBtn = getEl('tt-exec-cancel');
+            cancelBtn.onclick = () => {
                 this.isCancelled = true;
-                getEl('tt-exec-cancel').textContent = "Stopping...";
-                getEl('tt-exec-cancel').style.background = "#6c757d";
+                cancelBtn.textContent = "Stopping...";
+                cancelBtn.style.background = "#6c757d";
             };
 
             this.canvasCtx = getEl('tt-kps-graph').getContext('2d');
@@ -383,6 +400,45 @@
 
             if (this.config.humanitySim) this.createHumanityUI();
             if (this.config.showKeyboard) this.createKeyboardUI();
+            if (this.config.debugMode) this.createDebugUI(); // ★追加
+        }
+
+        // ==========================================
+        //  ★追加: UI作成: デバッグコンソール
+        // ==========================================
+        createDebugUI() {
+            if (this.debugUiContainer) return;
+
+            this.debugUiContainer = document.createElement('div');
+            this.debugUiContainer.style.cssText = `
+                position: fixed; top: 350px; right: 20px; width: 260px; height: 250px;
+                min-width: 230px; min-height: 200px;
+                background: rgba(40, 30, 20, 0.95); color: #ffb74d; padding: 10px; border-radius: 8px; z-index: 99998;
+                font-family: monospace; box-shadow: 0 4px 10px rgba(0,0,0,0.5); backdrop-filter: blur(4px); border: 1px solid #ff9800;
+                display: flex; flex-direction: column; resize: both; overflow: hidden;
+            `;
+
+            this.debugUiContainer.innerHTML = `
+                <div id="tt-debug-drag" style="font-size: 13px; font-weight: bold; margin-bottom: 10px; color: #ff9800; cursor: move; user-select: none; border-bottom: 1px solid #ff9800; padding-bottom: 4px; flex-shrink: 0;">🐛 Debug Console (Drag)</div>
+                <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-shrink: 0;">
+                    <div style="color: #aaa; margin-bottom: 4px;">[ Toggles ]</div>
+                    <div style="color: #666; font-size: 9px; margin-left: 10px;">(今後追加予定のデバッグ機能が並びます)</div>
+                </div>
+                <div id="tt-debug-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-grow: 1; display: flex; flex-direction: column; min-height: 0; overflow-y: auto;">
+                    <div style="color: #aaa; margin-bottom: 4px; flex-shrink: 0;">[ Information ]</div>
+                    <div id="tt-debug-info-none" style="color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">No debug features enabled.</div>
+                </div>
+            `;
+            document.body.appendChild(this.debugUiContainer);
+
+            this.setupDraggable(this.debugUiContainer, this.debugUiContainer.querySelector('#tt-debug-drag'));
+        }
+
+        removeDebugUI() {
+            if (this.debugUiContainer) {
+                this.debugUiContainer.remove();
+                this.debugUiContainer = null;
+            }
         }
 
         // ==========================================
@@ -446,7 +502,6 @@
             if (this.humanityUiContainer) return;
 
             this.humanityUiContainer = document.createElement('div');
-            // 高さを少し広げてPanic表示領域を確保
             this.humanityUiContainer.style.cssText = `
                 position: fixed; top: 20px; left: 20px; width: 260px; height: 420px;
                 min-width: 230px; min-height: 250px;
@@ -457,23 +512,19 @@
 
             this.humanityUiContainer.innerHTML = `
                 <div id="tt-humanity-drag" style="font-size: 13px; font-weight: bold; margin-bottom: 10px; color: #d63384; cursor: move; user-select: none; border-bottom: 1px solid #d63384; padding-bottom: 4px; flex-shrink: 0;">🧬 Humanity Simulation (Drag)</div>
-
                 <div style="font-size: 11px; margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-shrink: 0;">
                     <div style="color: #aaa; margin-bottom: 4px;">[ Toggles ]</div>
                     <label style="cursor: pointer; display: flex; align-items: center; margin-bottom: 4px;"><input type="checkbox" id="tt-hum-toggle-conc" ${this.config.humanityFeatures.concentration ? 'checked' : ''} style="margin-right: 6px;"> Concentration (集中力)</label>
                     <label style="cursor: pointer; display: flex; align-items: center; margin-bottom: 4px;"><input type="checkbox" id="tt-hum-toggle-weak" ${this.config.humanityFeatures.weakKeys ? 'checked' : ''} style="margin-right: 6px;"> Weak Keys (不得意キー)</label>
                     <label style="cursor: pointer; display: flex; align-items: center;"><input type="checkbox" id="tt-hum-toggle-panic" ${this.config.humanityFeatures.transPanic ? 'checked' : ''} style="margin-right: 6px;"> Trans. Panic (強制遷移対応)</label>
                 </div>
-
                 <div id="tt-hum-info-area" style="font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
                     <div style="color: #aaa; margin-bottom: 4px; flex-shrink: 0;">[ Information ]</div>
-
                     <div id="tt-hum-overall-status" style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #666; flex-shrink: 0;">
                         <div style="display: flex; justify-content: space-between; color: #00FF00; font-weight: bold;"><span>Eff. KPS:</span> <span id="tt-hum-eff-kps">0.00 - 0.00</span></div>
                         <div style="display: flex; justify-content: space-between; color: #ddd;"><span>Eff. Delay:</span> <span id="tt-hum-eff-delay">0 - 0 ms</span></div>
                         <div style="display: flex; justify-content: space-between; color: #FF4500;"><span>Eff. Miss:</span> <span id="tt-hum-eff-miss">0.0%</span></div>
                     </div>
-
                     <div id="tt-hum-info-conc" style="display: ${this.config.humanityFeatures.concentration ? 'flex' : 'none'}; flex-direction: column; flex-grow: 1; min-height: 0;">
                         <div style="display: flex; justify-content: space-between; flex-shrink: 0;"><span>Focus Level:</span> <span id="tt-hum-val-conc" style="font-weight: bold; color: #fff;">100%</span></div>
                         <div style="width: 100%; background: #444; height: 6px; border-radius: 3px; margin: 3px 0 6px 0; overflow: hidden; flex-shrink: 0;"><div id="tt-hum-bar-conc" style="width: 100%; height: 100%; background: #00FF00; transition: width 0.5s, background-color 0.5s;"></div></div>
@@ -481,12 +532,10 @@
                         <div style="display: flex; justify-content: space-between; color: #ccc; flex-shrink: 0;"><span>Delay Fix:</span> <span id="tt-hum-val-delay">x1.00</span></div>
                         <div style="display: flex; justify-content: space-between; color: #ccc; flex-shrink: 0;"><span>Miss Fix:</span> <span id="tt-hum-val-miss">x1.00</span></div>
                     </div>
-
                     <div id="tt-hum-info-weak" style="display: ${this.config.humanityFeatures.weakKeys ? 'flex' : 'none'}; flex-direction: column; margin-top: 8px; border-top: 1px dashed #666; padding-top: 6px; flex-shrink: 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;"><span>Weak: <span id="tt-hum-wk-list" style="color: #FFD700; word-break: break-all;">${this.config.weakKeysList.join(',').toUpperCase() || 'None'}</span></span><button id="tt-hum-btn-wk-edit" style="padding: 2px 6px; font-size: 10px; background: #d63384; color: white; border: none; border-radius: 3px; cursor: pointer;">Edit</button></div>
                         <div style="display: flex; gap: 4px; align-items: center;">Base:x<input type="number" id="tt-hum-wk-base" value="${this.config.weakKeysBase}" step="0.1" min="1.0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> Var:±<input type="number" id="tt-hum-wk-var" value="${this.config.weakKeysVar}" step="0.1" min="0" style="width: 40px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"></div>
                     </div>
-
                     <div id="tt-hum-info-panic" style="display: ${this.config.humanityFeatures.transPanic ? 'flex' : 'none'}; flex-direction: column; margin-top: 8px; border-top: 1px dashed #666; padding-top: 6px; flex-shrink: 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                             <span style="color: #FF6347;">⚠️ Transition Panic</span>
@@ -497,7 +546,6 @@
                             ±<input type="number" id="tt-hum-panic-var" value="${this.config.panicDelayVar}" step="50" min="0" style="width: 45px; padding: 1px; font-size: 10px; background: #333; color: #fff; border: 1px solid #555;"> ms
                         </div>
                     </div>
-
                     <div id="tt-hum-info-none" style="display: ${(this.config.humanityFeatures.concentration || this.config.humanityFeatures.weakKeys || this.config.humanityFeatures.transPanic) ? 'none' : 'block'}; color: #666; text-align: center; margin-top: 10px; flex-shrink: 0;">No features enabled.</div>
                 </div>
             `;
@@ -529,7 +577,7 @@
         async openWeakKeysModal() {
             if (document.getElementById('tt-wk-modal')) return;
 
-            // ★不得意キー選択モーダル表示時に一時停止
+            // ★モーダル表示時に一時停止
             await this.setPauseState(true);
 
             const overlay = document.createElement('div');
@@ -574,7 +622,6 @@
                 };
             });
 
-            // ★モーダルを閉じる際の共通処理 (再開)
             const closeModalAndResume = async () => {
                 overlay.remove();
                 await this.setPauseState(false);
@@ -603,12 +650,10 @@
         updateGraph() {
             if (this.isCancelled || this.isPaused || !this.isTypingLine) return;
 
-            // --- 人間性シミュレーションのリアルタイム計算 ---
             if (this.config.humanitySim) {
                 let currentDelayMult = 1.0;
                 let currentMissMult = 1.0;
 
-                // Panic Status UIの更新
                 if (this.humanityUiContainer && this.config.humanityFeatures.transPanic) {
                     const panicStatusEl = this.humanityUiContainer.querySelector('#tt-hum-panic-status');
                     if (panicStatusEl) {
@@ -701,7 +746,6 @@
                 }
             }
 
-            // --- Live KPS 計算 ---
             let kpsVal = 0;
             if (this.recentIntervals.length > 0) {
                 const sum = this.recentIntervals.reduce((a, b) => a + b, 0);
@@ -714,7 +758,6 @@
             const kpsText = this.execUiContainer.querySelector('#tt-kps-val');
             if (kpsText) kpsText.textContent = kpsVal.toFixed(2);
 
-            // --- Lifetime KPS & ばらつき 計算 ---
             if (this.allKpsRecords.length > 0) {
                 const sumAll = this.allKpsRecords.reduce((a, b) => a + b, 0);
                 const lifetimeKps = sumAll / this.allKpsRecords.length;
@@ -727,7 +770,6 @@
                 if (stddevEl) stddevEl.textContent = stdDev.toFixed(2);
             }
 
-            // --- メイングラフ描画 ---
             const canvas = this.execUiContainer.querySelector('#tt-kps-graph');
             if (this.canvasCtx && canvas) {
                 canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
@@ -764,6 +806,7 @@
             if (this.execUiContainer) this.execUiContainer.remove();
             this.removeHumanityUI();
             this.removeKeyboardUI();
+            this.removeDebugUI(); // ★追加
 
             const wkModal = document.getElementById('tt-wk-modal');
             if (wkModal) wkModal.remove();
@@ -847,11 +890,12 @@
             this.romajiData = this.controller.lyricsData?.typingRoma || [];
         }
 
+        // ★キー入力の適正化: アルファベット、数字、記号の分離処理
         async simulateKeydown(key, isTrackKps = true, isMiss = false) {
             let code, keyCode, shiftKey = false;
             const upperKey = key.toUpperCase();
 
-            /* 1. 特殊キーの個別処理 */
+            // 1. 特殊キーの個別処理
             if (key === "F4") {
                 code = "F4"; keyCode = 115;
             } else if (key === "Escape") {
@@ -859,19 +903,18 @@
             } else if (key === " ") {
                 code = "Space"; keyCode = 32;
             }
-            /* 2. アルファベット入力 ([a-zA-Z]) */
+            // 2. アルファベット入力 ([a-zA-Z])
             else if (/^[a-zA-Z]$/.test(key)) {
                 code = "Key" + upperKey;
                 keyCode = upperKey.charCodeAt(0);
-                /* 大文字の場合はShiftフラグを立てる */
                 if (key === upperKey && key !== key.toLowerCase()) shiftKey = true;
             }
-            /* 3. 数字入力 ([0-9]) */
+            // 3. 数字入力 ([0-9])
             else if (/^[0-9]$/.test(key)) {
                 code = "Digit" + key;
                 keyCode = key.charCodeAt(0);
             }
-            /* 4. 記号入力 */
+            // 4. 記号入力
             else {
                 const data = SYMBOL_MAP[key];
                 if (data) {
@@ -879,13 +922,12 @@
                     keyCode = data.k;
                     shiftKey = data.s || false;
                 } else {
-                    /* マップにない記号へのフォールバック */
+                    // マップにない記号へのフォールバック
                     code = "Key" + upperKey;
                     keyCode = upperKey.charCodeAt(0);
                 }
             }
 
-            /* 構築したプロパティでKeyboardEventを生成 */
             const event = new KeyboardEvent("keydown", {
                 key,
                 code,
