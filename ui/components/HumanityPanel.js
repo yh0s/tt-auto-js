@@ -8,6 +8,9 @@ export class HumanityPanel {
         this.container = null;
         this.cleanupDrag = null;
 
+        // ★追加: ゲームが開始済みであるかを記憶するフラグ
+        this.isGameStarted = false;
+
         this.eventBus.on('ui:weakKeysUpdated', (keys) => {
             if (this.container) {
                 const listEl = this.container.querySelector('#tt-hum-wk-list');
@@ -15,18 +18,24 @@ export class HumanityPanel {
             }
         });
 
-        // ★追加: ゲーム開始イベントを受信してボタンを有効化する
+        // ★修正: ゲーム開始イベントを受信したら記憶し、ボタンを有効化する
         this.eventBus.on('typer:gameStarted', () => {
-            if (this.container) {
-                const editBtn = this.container.querySelector('#tt-hum-btn-wk-edit');
-                if (editBtn) {
-                    editBtn.disabled = false;
-                    editBtn.style.background = '#d63384';
-                    editBtn.style.color = 'white';
-                    editBtn.style.cursor = 'pointer';
-                }
-            }
+            this.isGameStarted = true;
+            this.enableEditButton();
         });
+    }
+
+    // ★追加: Editボタンを有効化する共通ロジック
+    enableEditButton() {
+        if (this.container) {
+            const editBtn = this.container.querySelector('#tt-hum-btn-wk-edit');
+            if (editBtn) {
+                editBtn.disabled = false;
+                editBtn.style.background = '#d63384';
+                editBtn.style.color = 'white';
+                editBtn.style.cursor = 'pointer';
+            }
+        }
     }
 
     create() {
@@ -38,6 +47,11 @@ export class HumanityPanel {
 
         this.cleanupDrag = setupDraggable(this.container, this.container.querySelector('#tt-humanity-drag'));
         this.bindEvents();
+
+        // ★追加: モーダル生成時に、すでにゲームが開始していれば即座にボタンを有効化する
+        if (this.isGameStarted) {
+            this.enableEditButton();
+        }
     }
 
     bindEvents() {
