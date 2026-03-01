@@ -8,7 +8,16 @@ export class DebugKeyboardPanel {
         this.container = null;
         this.cleanupDrag = null;
         this.isShift = false;
+
+        // 状態記憶用のプロパティ
         this.wasShowKeyboardEnabled = false;
+        this.currentSuspendState = false;      // 現在のサスペンド状態を追跡
+        this.wasSuspendedBeforeOpen = false;   // 開く前のサスペンド状態を記憶
+
+        // ★追加: 常に最新のサスペンド状態を同期しておく
+        this.eventBus.on('typer:suspendChanged', (isSuspended) => {
+            this.currentSuspendState = isSuspended;
+        });
     }
 
     create() {
@@ -20,8 +29,11 @@ export class DebugKeyboardPanel {
             this.eventBus.emit('ui:toggleKeyboard', false);
         }
 
-        // ★修正: 開かれると「自動入力機能のみ」を停止する（ゲームはPauseしない）
-        this.eventBus.emit('debug:suspendAutoTyping', true);
+        // ★修正: 開く前のサスペンド状態を記憶し、稼働中なら一時停止する
+        this.wasSuspendedBeforeOpen = this.currentSuspendState;
+        if (!this.wasSuspendedBeforeOpen) {
+            this.eventBus.emit('debug:suspendAutoTyping', true);
+        }
 
         this.container = document.createElement('div');
         this.container.style.cssText = getDebugKeyboardStyle();
@@ -85,8 +97,10 @@ export class DebugKeyboardPanel {
             this.eventBus.emit('ui:toggleKeyboard', true);
         }
 
-        // ★修正: 閉じたら「自動入力」を再開する
-        this.eventBus.emit('debug:suspendAutoTyping', false);
+        // ★修正: 開く前に稼働中だった場合のみ、自動入力を再開する
+        if (!this.wasSuspendedBeforeOpen) {
+            this.eventBus.emit('debug:suspendAutoTyping', false);
+        }
     }
 
     remove() {

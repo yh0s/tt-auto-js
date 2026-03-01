@@ -47,6 +47,9 @@ export class ExecutionPanel {
             this.eventBus.emit('ui:toggleDebug', e.target.checked);
         });
 
+        // ★追加: Suspendボタンのクリックイベント
+        getEl('tt-exec-suspend').onclick = () => this.eventBus.emit('ui:action_suspendToggle');
+
         getEl('tt-exec-pause').onclick = () => this.eventBus.emit('ui:action_pauseToggle');
         getEl('tt-exec-cancel').onclick = () => {
             this.eventBus.emit('ui:action_cancel');
@@ -61,6 +64,17 @@ export class ExecutionPanel {
         if (pauseBtn) {
             pauseBtn.textContent = isPaused ? "Resume" : "Pause";
             pauseBtn.style.background = isPaused ? "#28a745" : "#007bff";
+        }
+    }
+
+    // ★追加: Suspend状態のUI更新
+    updateSuspendUI(isSuspended) {
+        if (!this.container) return;
+        const suspendBtn = this.container.querySelector('#tt-exec-suspend');
+        if (suspendBtn) {
+            // オレンジ色の警告色で一時停止中であることを分かりやすく表現
+            suspendBtn.textContent = isSuspended ? "Auto: OFF" : "Auto: ON";
+            suspendBtn.style.background = isSuspended ? "#fd7e14" : "#17a2b8";
         }
     }
 
@@ -82,8 +96,6 @@ export class ExecutionPanel {
             const ctx = this.canvasCtx;
 
             ctx.clearRect(0, 0, width, height);
-
-            // ★定数を適用
             const maxKps = Math.max(SYSTEM.MIN_GRAPH_Y_AXIS_KPS, Math.ceil(Math.max(...state.kpsHistory)));
 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'; ctx.font = '10px monospace';

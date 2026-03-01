@@ -13,7 +13,7 @@ export class AutoTyper {
 
         this.isCancelled = false;
         this.isPaused = false;
-        this.isSuspended = false; // ★追加: 自動入力のみを一時停止するフラグ
+        this.isSuspended = false; // 自動入力のみの一時停止フラグ
         this.isTypingLine = false;
         this.isTransitionPanic = false;
         this.tickerInterval = null;
@@ -29,15 +29,15 @@ export class AutoTyper {
             this.eventBus.emit('ui:weakKeysUpdated', keys);
         });
 
-        // デバッグキーボードからの強制入力
         this.eventBus.on('debug:simulateKeydown', (key) => {
             this.simulateKeydown(key, false, false);
         });
 
-        // ★追加: 自動入力のサスペンド制御（ゲームはPauseしない）
-        this.eventBus.on('debug:suspendAutoTyping', (state) => {
-            this.isSuspended = state;
-        });
+        // ★追加: UIからのサスペンドトグル操作
+        this.eventBus.on('ui:action_suspendToggle', () => this.setSuspendState(!this.isSuspended));
+
+        // ★変更: デバッグキーボードからのサスペンド指示も共通メソッドを通す
+        this.eventBus.on('debug:suspendAutoTyping', (state) => this.setSuspendState(state));
     }
 
     async setPauseState(state) {
@@ -47,6 +47,13 @@ export class AutoTyper {
 
         this.eventBus.emit('typer:pauseChanged', this.isPaused);
         await this.simulateKeydown("Escape", false, false);
+    }
+
+    // ★追加: サスペンド状態をセットしUIに通知するメソッド
+    setSuspendState(state) {
+        if (this.isCancelled || this.isSuspended === state) return;
+        this.isSuspended = state;
+        this.eventBus.emit('typer:suspendChanged', this.isSuspended);
     }
 
     init() {
@@ -64,7 +71,6 @@ export class AutoTyper {
 
     startTicker() {
         this.tickerInterval = setInterval(() => {
-            // ★変更: isSuspended の場合もグラフ更新等を一時停止
             if (this.isCancelled || this.isPaused || this.isSuspended || !this.isTypingLine) return;
 
             const humState = this.humanity.tick();
@@ -120,7 +126,6 @@ export class AutoTyper {
             if (this.isCancelled) break;
             const lineKeys = keysList[i];
 
-            // ★変更: isPaused または isSuspended の時に待機する
             while ((this.isPaused || this.isSuspended) && !this.isCancelled) {
                 await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
             }
@@ -137,7 +142,6 @@ export class AutoTyper {
 
             for (let j = 0; j < lineKeys.length; j++) {
                 if (this.isCancelled) break;
-                // ★変更: 1文字ごとのループ内でも isSuspended を確認
                 while ((this.isPaused || this.isSuspended) && !this.isCancelled) {
                     await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
                     this.stats.resetLine();
@@ -174,7 +178,6 @@ export class AutoTyper {
             this.isTypingLine = false;
 
             if (this.isCancelled) break;
-            // ★変更: 行の終わりのスキップ前待機
             while ((this.isPaused || this.isSuspended) && !this.isCancelled) {
                 await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
             }

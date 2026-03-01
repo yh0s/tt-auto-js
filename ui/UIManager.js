@@ -3,7 +3,7 @@ import { DebugPanel } from './components/DebugPanel.js';
 import { KeyboardPanel } from './components/KeyboardPanel.js';
 import { HumanityPanel } from './components/HumanityPanel.js';
 import { WeakKeysModal } from './components/WeakKeysModal.js';
-import { DebugKeyboardPanel } from './components/DebugKeyboardPanel.js'; // ★追加
+import { DebugKeyboardPanel } from './components/DebugKeyboardPanel.js';
 
 export class UIManager {
     constructor(config, eventBus) {
@@ -15,10 +15,13 @@ export class UIManager {
         this.keyboardPanel = new KeyboardPanel(config, eventBus);
         this.humanityPanel = new HumanityPanel(config, eventBus);
         this.weakKeysModal = new WeakKeysModal(config, eventBus);
-        this.debugKeyboardPanel = new DebugKeyboardPanel(config, eventBus); // ★追加
+        this.debugKeyboardPanel = new DebugKeyboardPanel(config, eventBus);
 
-        // --- AutoTyperからのイベントをパネルにルーティング ---
         this.eventBus.on('typer:pauseChanged', (isPaused) => this.executionPanel.updatePauseUI(isPaused));
+
+        // ★追加: サスペンド状態の変更をUIパネルに伝える
+        this.eventBus.on('typer:suspendChanged', (isSuspended) => this.executionPanel.updateSuspendUI(isSuspended));
+
         this.eventBus.on('typer:keydown', (data) => this.keyboardPanel.flashKey(data.key, data.isMiss));
         this.eventBus.on('typer:finished', () => this.cleanupUI());
 
@@ -27,13 +30,11 @@ export class UIManager {
             this.executionPanel.updateGraph(state);
         });
 
-        // --- パネルから発火されるUI表示切替イベントのハンドリング ---
         this.eventBus.on('ui:toggleHumanity', (show) => show ? this.humanityPanel.create() : this.humanityPanel.remove());
         this.eventBus.on('ui:toggleKeyboard', (show) => show ? this.keyboardPanel.create() : this.keyboardPanel.remove());
         this.eventBus.on('ui:toggleDebug', (show) => show ? this.debugPanel.create() : this.debugPanel.remove());
         this.eventBus.on('ui:openWeakKeys', () => this.weakKeysModal.open());
 
-        // ★追加: デバッグキーボードのルーティング
         this.eventBus.on('debug:openKeyboard', () => this.debugKeyboardPanel.create());
     }
 
@@ -50,6 +51,6 @@ export class UIManager {
         this.keyboardPanel.remove();
         this.debugPanel.remove();
         this.weakKeysModal.remove();
-        this.debugKeyboardPanel.remove(); // ★追加
+        this.debugKeyboardPanel.remove();
     }
 }
