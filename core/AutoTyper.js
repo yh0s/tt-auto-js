@@ -241,18 +241,17 @@ export class AutoTyper {
                 await delay(SYSTEM.POLL_INTERVAL_MS, () => this.isCancelled);
             }
 
-            // ===============================================
-            // ★変更: スキップ判定（Force優先、次に通常のSkip判定）
-            // ===============================================
-            if (this.config.forceAutoSkip && !this.isCancelled) {
-                if (this.shouldExecuteForceAutoSkip()) {
-                    await this.simulateKeydown(" ", false, false);
-                }
-            } else if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
-                if (this.shouldExecuteAutoSkip()) {
-                    const youtubeController = this.controller.youtubeController;
-                    const lyricsArray = this.controller.lyricsData.lyricsArray;
-                    youtubeController && (this.controller._lastGameYtAction = Date.now(), youtubeController.seekTo(parseFloat(lyricsArray[this.controller.count][0]) - 0.1, true));
+            if (this.config.autoSkip && !this.isCancelled && !this.isTransitionPanic) {
+                if (this.config.forceAutoSkip) {
+                    if (this.shouldExecuteForceAutoSkip()) {
+                        const youtubeController = this.controller.youtubeController;
+                        const lyricsArray = this.controller.lyricsData.lyricsArray;
+                        youtubeController && (this.controller._lastGameYtAction = Date.now(), youtubeController.seekTo(parseFloat(lyricsArray[this.controller.count][0]) - 0.1, true));
+                    }
+                } else {
+                    if (this.shouldExecuteAutoSkip()) {
+                        await this.simulateKeydown(" ", false, false);
+                    }
                 }
             }
 
